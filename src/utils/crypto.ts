@@ -49,3 +49,24 @@ export function encrypt(text: string): string {
     encrypted.toString('hex')
   ].join('.')
 }
+
+
+
+export function decrypt(payload: string): string {
+  const [ivHex, tagHex, dataHex] = payload.split('.')
+
+  const iv = Buffer.from(ivHex, 'hex')
+  const tag = Buffer.from(tagHex, 'hex')
+  const encrypted = Buffer.from(dataHex, 'hex')
+  const key = Buffer.from(config.encryptionSecret, 'hex')
+
+  const decipher = crypto.createDecipheriv(ALGO, key, iv)
+  decipher.setAuthTag(tag)
+
+  const decrypted = Buffer.concat([
+    decipher.update(encrypted),
+    decipher.final()
+  ])
+
+  return decrypted.toString('utf8')
+}
