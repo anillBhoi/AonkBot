@@ -1,4 +1,4 @@
-import { startBot } from './bot'
+import { startBot } from './bot/index.js'
 
 async function bootstrap() {
   await startBot()
