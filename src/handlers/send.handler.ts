@@ -1,7 +1,7 @@
 import { Context } from 'grammy'
-import { getOrCreateWallet } from '../blockchain/wallet.service.js'
-import { sendSol } from '../blockchain/transfer.service.js'
 import { acquireLock } from '../core/locks.js'
+import { createConfirmation } from '../core/confirmations/confirmation.service.js'
+import { validateSolanaAddress } from '../core/validators/solanaAddress.validator.js'
 
 export async function sendHandler(ctx: Context): Promise<void> {
   const userId = ctx.from?.id
@@ -21,25 +21,24 @@ export async function sendHandler(ctx: Context): Promise<void> {
     return
   }
 
-  // 🔒 Prevent double-send
-  const locked = await acquireLock(userId, 'send')
+  try {
+    //  THIS IS THE KEY FIX
+    validateSolanaAddress(address)
+  } catch (err: any) {
+    await ctx.reply(err.message)
+    return
+  }
+
+  const locked = await acquireLock(userId, 'send-draft')
   if (!locked) return
 
-  try {
-    const wallet = await getOrCreateWallet(userId)
+  await createConfirmation(userId, { amount, address })
 
-    const sig = await sendSol(
-      wallet.encryptedPrivateKey,
-      address,
-      amount
-    )
-
-    await ctx.reply(
-      `✅ Sent *${amount} SOL*\n\nTx:\n\`${sig}\``,
-      { parse_mode: 'Markdown' }
-    )
-  } catch (err: any) {
-    console.error('[Send Error]', err)
-    await ctx.reply(`❌ ${err.message}`)
-  }
+  await ctx.reply(
+    `⚠️ *Confirm Transaction*\n\n` +
+    `Send *${amount} SOL*\n` +
+    `To:\n\`${address}\`\n\n` +
+    `Type /confirm to proceed or /cancel`,
+    { parse_mode: 'Markdown' }
+  )
 }
