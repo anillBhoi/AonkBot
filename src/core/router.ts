@@ -6,6 +6,7 @@ import { unknownHandler } from '../handlers/unknown.handler.js'
 import { walletHandler } from '../handlers/wallet.handler.js'
 import { sendHandler } from '../handlers/send.handler.js'
 
+// completed phase 2 
 const routes: Record<string, (ctx: Context) => Promise<void>> = {
   start: startHandler,
   wallet: walletHandler,
