@@ -9,6 +9,7 @@ import { confirmHandler } from '../handlers/confirm.handler.js'
 // import { cancelHandler } from '../handlers/cancel.handler.js'
 import { unknownHandler } from '../handlers/unknown.handler.js'
 import { cancelHandler } from '../handlers/cancel.handler.js'
+import { txsHandler } from '../handlers/txs.handler.js'
 
 const routes: Record<string, (ctx: Context) => Promise<void>> = {
   start: startHandler,
@@ -16,6 +17,7 @@ const routes: Record<string, (ctx: Context) => Promise<void>> = {
   send: sendHandler,
   confirm: confirmHandler,
   cancel: cancelHandler,
+  txs: txsHandler,
   help: helpHandler
 }
 
