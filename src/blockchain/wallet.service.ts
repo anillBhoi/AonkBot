@@ -2,7 +2,7 @@ import { Keypair } from '@solana/web3.js'
 import bs58 from 'bs58'
 import { redis } from '../config/redis.js'
 import { redisKeys } from '../utils/redisKeys.js'
-import { encrypt } from '../utils/crypto.js'
+import { decrypt, encrypt } from '../utils/crypto.js'
 
 interface UserWallet {
   telegramId: number
@@ -39,4 +39,25 @@ export async function getOrCreateWallet(
   await redis.set(key, JSON.stringify(wallet))
 
   return wallet
+}
+
+
+export async function loadWalletSigner(
+  telegramId: number
+): Promise<Keypair> {
+
+  const key = redisKeys.wallet(telegramId)
+  const raw = await redis.get(key)
+
+  if (!raw) {
+    throw new Error('Wallet not found for signer load')
+  }
+
+  const wallet = JSON.parse(raw) as UserWallet
+
+  // 🔓 Decrypt private key only in-memory
+  const secretKeyBase58 = decrypt(wallet.encryptedPrivateKey)
+  const secretKey = bs58.decode(secretKeyBase58)
+
+  return Keypair.fromSecretKey(secretKey)
 }

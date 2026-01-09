@@ -13,7 +13,9 @@
   },
   "dependencies": {
     "@solana/web3.js": "^1.98.4",
+    "axios": "^1.13.2",
     "bs58": "^6.0.0",
+    "bull": "^4.16.5",
     "bullmq": "^5.66.4",
     "dotenv": "^17.2.3",
     "grammy": "^1.39.2",

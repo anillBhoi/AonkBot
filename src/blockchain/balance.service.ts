@@ -18,3 +18,22 @@ export async function getSolBalance(
     throw new Error('Failed to fetch SOL balance')
   }
 }
+
+
+// import { solana } from './solana.client.js' 
+// import { PublicKey } from '@solana/web3.js'
+
+// const RENT_BUFFER = 0.01 * 1e9
+// const FEE_BUFFER = 0.005 * 1e9
+
+// export async function ensureSolBalance(
+//   pubkey: string,
+//   amount: bigint
+// ) {
+//   const balance = await solana.getBalance(new PublicKey(pubkey))
+//   const required = Number(amount) + RENT_BUFFER + FEE_BUFFER
+
+//   if (balance < required) {
+//     throw new Error('Insufficient SOL balance')
+//   }
+// }

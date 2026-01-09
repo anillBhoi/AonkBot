@@ -30,3 +30,22 @@ export async function getRecentTransactions(
     throw new Error('Failed to fetch transactions')
   }
 }
+
+
+
+
+
+import { VersionedTransaction } from '@solana/web3.js'
+
+export async function simulateTx(tx: VersionedTransaction) {
+  const sim = await solana.simulateTransaction(tx)
+  if (sim.value.err) {
+    throw new Error('Simulation failed')
+  }
+}
+
+export async function sendTxAndConfirm(tx: VersionedTransaction) {
+  const sig = await solana.sendTransaction(tx)
+  await solana.confirmTransaction(sig, 'confirmed')
+  return sig
+}
