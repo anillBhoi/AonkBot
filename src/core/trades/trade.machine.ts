@@ -46,9 +46,7 @@ export class TradeMachine {
       /** 🔑 Load keypair with decryption */
       const keypair = await loadWalletSigner(telegramId)
 
-      tx.sign([keypair])
-
-      const sig = await sendTxAndConfirm(tx)
+      const sig = await sendTxAndConfirm(tx, keypair, 3)
       await redis.set(`trade:${tradeId}:signature`, sig)
 
       await this.transition(tradeId, TradeState.SIMULATED, TradeState.CONFIRMED)
