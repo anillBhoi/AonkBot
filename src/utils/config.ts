@@ -11,5 +11,8 @@ export const config = {
   redisUrl: must('REDIS_URL'),
   solanaRpc: must('SOLANA_RPC_URL'),
   solanaCluster: process.env.SOLANA_CLUSTER || 'devnet',
-  encryptionSecret: must('ENCRYPTION_SECRET')
+  encryptionSecret: must('ENCRYPTION_SECRET'),
+  useDevnetDex: process.env.USE_DEVNET_DEX === 'true',
+  devnetAutoSetup: process.env.DEVNET_AUTO_SETUP === 'true',
+  devnetUsdcMint: process.env.DEVNET_USDC_MINT || ''
 }
