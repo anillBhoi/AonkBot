@@ -1,0 +1,20 @@
+
+import { InlineKeyboard } from 'grammy'
+
+export const walletMenu = new InlineKeyboard()
+  .text('View on Solscan', 'cmd:wallet')
+  .text('close', 'cmd:swap')
+  .row()
+  .text('Deposit SOL', 'cmd:send')
+  .text('Buy SOL', 'cmd:txs')
+  .row()
+  .text('Withdraw all SOL', 'cmd:settings')
+  .text('Withdraw X SOL', 'cmd:help')
+  .row()
+  .text('Manage Wallets', 'cmd:wallet')
+  .text('Manage Tokens', 'cmd:wallet' )
+  .row()
+  .text('Reset All Wallets', 'cmd:wallet')
+  .text('Export Seed Phrase','cmd:wallet' )
+  .row()
+  .text('Refresh', 'cmd:wallet')

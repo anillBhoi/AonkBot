@@ -1,6 +1,7 @@
 import { Context } from 'grammy'
 import { getOrCreateWallet } from '../blockchain/wallet.service.js'
 import { getSolBalance, getTokenBalances } from '../blockchain/balance.service.js'
+import { walletMenu } from '../ui/walletMenu.js'
 
 export async function walletHandler(ctx: Context): Promise<void> {
   const userId = ctx.from?.id
@@ -44,7 +45,8 @@ export async function walletHandler(ctx: Context): Promise<void> {
       `\n\n` +
       `Use /send to swap tokens\n` +
       `Use /txs to view transaction history`,
-      { parse_mode: 'Markdown' }
+      // { parse_mode: 'Markdown' }
+       { reply_markup: walletMenu }
     )
   } catch (err: any) {
     console.error('[Wallet Handler Error]', err)
@@ -52,7 +54,8 @@ export async function walletHandler(ctx: Context): Promise<void> {
       `⚠️ Unable to fetch wallet details\n\n` +
       `Error: ${err.message}\n` +
       `Please try again shortly.`,
-      { parse_mode: 'Markdown' }
+      // { parse_mode: 'Markdown' }
+       { reply_markup: walletMenu }
     )
   }
 }

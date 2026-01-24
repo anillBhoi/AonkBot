@@ -7,8 +7,6 @@ export async function routeCallback(ctx: Context) {
   const data = ctx.callbackQuery?.data
   if (!data?.startsWith('cmd:')) return
 
-  console.log('CALLBACK RECEIVED:', ctx.callbackQuery?.data)
-
   const command = data.replace('cmd:', '')
   const userId = ctx.from?.id
   if (!userId) return
