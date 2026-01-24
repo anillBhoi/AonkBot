@@ -2,7 +2,7 @@ import { Context } from 'grammy'
 import { acquireLock } from '../core/locks.js'
 import { createConfirmation } from '../core/confirmations/confirmation.service.js'
 import { validateAmount } from '../core/validators/amount.validator.js'
-import { getQuote } from '../blockchain/jupiter.service.js'
+//import { getQuote } from '../blockchain/jupiter.service.js'
 import { getSolBalance, ensureSolBalance } from '../blockchain/balance.service.js'
 import { getOrCreateWallet } from '../blockchain/wallet.service.js'
 import { createTradeIntent, TradeIntent } from '../core/trades/trade.intent.js'
@@ -84,7 +84,7 @@ export async function sendHandler(ctx: Context): Promise<void> {
 
       // Fetch quote (SOL -> outputSymbol)
       await ctx.reply('🔄 Getting quote...')
-      const quote = await getQuote('SOL', outputSymbol!, amount, slippageBps)
+      // const quote = await getQuote('SOL', outputSymbol!, amount, slippageBps)
 
       // Acquire lock for this user
       const locked = await acquireLock(userId, 'send-draft', 60000)
@@ -104,16 +104,16 @@ export async function sendHandler(ctx: Context): Promise<void> {
       })
 
       // Store confirmation with quote (convert BigInt to string)
-      const confirmationPayload = {
-        tradeIntent: {
-          ...tradeIntent,
-          amountLamports: tradeIntent.amountLamports.toString()
-        },
-        quote,
-        timestamp: Date.now()
-      }
+      // const confirmationPayload = {
+      //   tradeIntent: {
+      //     ...tradeIntent,
+      //     amountLamports: tradeIntent.amountLamports.toString()
+      //   },
+      //   quote,
+      //   timestamp: Date.now()
+      // }
       
-      await createConfirmation(userId, confirmationPayload)
+      // await createConfirmation(userId, confirmationPayload)
 
       // Store trade intent in Redis (convert BigInt to string for serialization)
       await redis.set(
@@ -127,19 +127,19 @@ export async function sendHandler(ctx: Context): Promise<void> {
       )
 
       // Format output
-      const minOutput = quote.outAmount * (1 - slippageBps / 10000)
-      const priceImpact = quote.priceImpactPct.toFixed(2)
+      // const minOutput = quote.outAmount * (1 - slippageBps / 10000)
+      // const priceImpact = quote.priceImpactPct.toFixed(2)
 
-      await ctx.reply(
-        `📊 *Swap Quote*\n\n` +
-        `*From:* ${amount} SOL\n` +
-        `*To:* ~${quote.outAmount.toFixed(6)} ${outputSymbol}\n\n` +
-        `*Min Output:* ${minOutput.toFixed(6)} ${outputSymbol}\n` +
-        `*Price Impact:* ${priceImpact}%\n` +
-        `*Fee:* ~0.005 SOL\n\n` +
-        `Use /confirm to execute or /cancel to abort`,
-        { parse_mode: 'Markdown' }
-      )
+      // await ctx.reply(
+      //   `📊 *Swap Quote*\n\n` +
+      //   `*From:* ${amount} SOL\n` +
+      //   `*To:* ~${quote.outAmount.toFixed(6)} ${outputSymbol}\n\n` +
+      //   `*Min Output:* ${minOutput.toFixed(6)} ${outputSymbol}\n` +
+      //   `*Price Impact:* ${priceImpact}%\n` +
+      //   `*Fee:* ~0.005 SOL\n\n` +
+      //   `Use /confirm to execute or /cancel to abort`,
+      //   { parse_mode: 'Markdown' }
+      // )
 
       return
     }

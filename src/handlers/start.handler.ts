@@ -1,6 +1,7 @@
 import { Context } from 'grammy'
 import { getOrCreateWallet } from '../blockchain/wallet.service.js'
 import { config } from '../utils/config.js'
+import { mainMenuKeyboard } from '../ui/mainMenu.keyboard.js'
 
 export async function startHandler(ctx: Context) {
   const userId = ctx.from?.id
@@ -24,5 +25,9 @@ export async function startHandler(ctx: Context) {
     `7. /help - Show full command reference\n\n` +
     `*Notes:* Quotes expire in 60s. Default slippage = 50 bps (0.5%). Use /help for examples.`
 
-  await ctx.reply(welcome, { parse_mode: 'Markdown' })
+  //await ctx.reply(welcome, { parse_mode: 'Markdown' })
+ await ctx.reply(
+    'Welcome to AonkBot 🚀\n\nSelect an action below:',
+    { reply_markup: mainMenuKeyboard }
+  )
 }
