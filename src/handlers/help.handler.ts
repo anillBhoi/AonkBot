@@ -4,46 +4,27 @@ export async function helpHandler(ctx: Context) {
   const helpText = `
 🤖 *AonkBot - Solana Trading Bot*
 
-📖 *Available Commands:*
+Help:
 
-/start - Initialize your wallet
-/wallet - Check balance & token holdings
-/swap - Swap tokens (recommended)
-  Usage: /swap <amount> <token> [slippage]
-  Examples:
-    /swap 1 USDC           (swap 1 SOL -> USDC)
-    /swap 120 USDC to SOL  (swap 120 USDC -> SOL)
+Which tokens can I trade?
+Any SPL token that is a SOL pair, on Raydium.io, pump.fun, Meteora.ag, Moonshot.com, or jup.ag (Jupiter), and will integrate more platforms on a rolling basis. We pick up pairs instantly, and Jupiter will pick up non-SOL pairs within approx. 15 minutes.
 
-/send - Send SOL to another address
-  Usage: /send <amount> <to_address>
-  Example: /send 1 H3G...abc
+How can I see how much money I've made from referrals?
+Tap the referrals button or type /referrals to see your payment in $Aonk!
 
-/confirm - Execute pending trade or transfer
-/cancel - Cancel pending action
-/txs - View recent transactions
-/help - Show this message
+How do I create a new wallet on AonkBot?
+Tap the Wallet button or type /wallet, and you'll be able to configure your new wallets!
 
-💡 *Quick Start Guide:*
+Is AonkBot free? How much do I pay for transactions?
+AonkBot is completely free! We charge 1% on transactions, and keep the bot free so that anyone can use it. 
 
-1. /start - Create your wallet
-2. /wallet - Fund your wallet with SOL
-3. /swap 0.5 USDC - Get a quote to swap 0.5 SOL for USDC
-4. /confirm - Execute the swap or transfer
+Why is my Net Profit lower than expected?
+Your Net Profit is calculated after deducting all associated costs, including Price Impact, Transfer Tax, Dex Fees, and a 1% AonkBot fee. This ensures the figure you see is what you actually receive, accounting for all transaction-related expenses.
 
-⚙️ *Parameters:*
+Is there a difference between @AonkBot_bot and the backup bots?
+No, they are all the same bot and you can use them interchangeably. If one is slow or down, you can use the other ones. You will have access to the same wallet and positions.
 
-<amount> - Amount in SOL by default (when source token omitted)
-<token> - Token symbol (e.g., USDC)
-[slippage] - Slippage in basis points (default 50 = 0.5%)
-
-⚠️ *Important:*
-
-• /swap creates a quote; you must run /confirm to execute
-• /send will transfer SOL to the specified address (no swap)
-• Your private key is encrypted and never transmitted
-• Transactions may fail if liquidity is low
-• Network fees apply to all trades
-
+Further questions? Join our Telegram group: https://t.me/AonkBotChat
 ❓ For support, contact @aonkbot_support
 `
 
