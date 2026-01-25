@@ -11,6 +11,7 @@ import { createRateLimiter, RATE_LIMITS } from './rateLimit/rateLimit.service.js
 import { acquireLock } from './locks.js'
 import { unknownHandler } from '../handlers/unknown.handler.js'
 import { asBotError } from './errors/botError.js'
+import { deposit } from '../handlers/deposit.handler.js'
 
 export const routes: Record<string, (ctx: Context) => Promise<void>> = {
   start: startHandler,
@@ -20,6 +21,7 @@ export const routes: Record<string, (ctx: Context) => Promise<void>> = {
   send: transferHandler,
   confirm: confirmHandler,
   cancel: cancelHandler,
+  deposit: deposit,
   txs: txsHandler,
   help: helpHandler,
   devnetcredit: (ctx) =>
