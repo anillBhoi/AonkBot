@@ -12,6 +12,7 @@ import { acquireLock } from './locks.js'
 import { unknownHandler } from '../handlers/unknown.handler.js'
 import { asBotError } from './errors/botError.js'
 import { deposit } from '../handlers/deposit.handler.js'
+import { buySolHandler } from '../handlers/buySol.handler.js'
 
 export const routes: Record<string, (ctx: Context) => Promise<void>> = {
   start: startHandler,
@@ -21,6 +22,7 @@ export const routes: Record<string, (ctx: Context) => Promise<void>> = {
   send: transferHandler,
   confirm: confirmHandler,
   cancel: cancelHandler,
+  buysol: buySolHandler,
   deposit: deposit,
   txs: txsHandler,
   help: helpHandler,

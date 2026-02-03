@@ -8,7 +8,7 @@ function must(key: string): string {
 
 export const config = {
   botToken: must('BOT_TOKEN'),
-  redisUrl: must('REDIS_URL'),
+  redisUrl: must('REDIS_URL'), 
   solanaRpc: must('SOLANA_RPC_URL'),
   solanaCluster: process.env.SOLANA_CLUSTER || 'devnet',
   encryptionSecret: must('ENCRYPTION_SECRET'),
