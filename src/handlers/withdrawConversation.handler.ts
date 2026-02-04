@@ -1,64 +1,63 @@
 import { Context, InlineKeyboard } from "grammy";
 import { getWithdrawState, setWithdrawState } from "../core/state/withdraw.state.js";
 
-export async function withdrawConversationHandler(ctx: Context){
+export async function withdrawConversationHandler(ctx: Context) {
 
-    const userId = ctx.from?.id;
-    if(!userId) return;
+  const userId = ctx.from?.id;
+  if (!userId) return;
 
-    const state = getWithdrawState(userId);
+  const state = getWithdrawState(userId);
+  if (!state) return;
 
-    if(!state) return;
+  const text = ctx.message?.text;
+  if (!text) return;
 
-    const text = ctx.message?.text;
-    if(!text) return;
+  /* ===== Step 1: Amount ===== */
+  if (state.step === "awaiting_amount") {
 
-    // step 1 amount
+    const amount = Number(text);
 
-    if(state.step === "awaiting_amount") {
-        const amount = Number(text);
-
-        if(isNaN(amount) || amount <= 0) {
-            await ctx.reply("❌ Invalid amount. Enter valid SOL amount.");
-            return;
-        }
-
-        setWithdrawState(userId, {
-            step: "awaiting_address",
-            amount
-        });
-
-        await ctx.reply("📩 Enter destination wallet address:");
-        return;
+    if (isNaN(amount) || amount <= 0) {
+      await ctx.reply("❌ Invalid amount. Enter valid SOL amount.");
+      return;
     }
 
-    // step 2 destination 
-    if(state.step === "awaiting_address") {
-        state.destination = text;
+    setWithdrawState(userId, {
+      step: "awaiting_address",
+      amount
+    });
 
-        setWithdrawState(userId, {
-            ...state, 
-            step: "confirming"
-        });
+    await ctx.reply("📩 Enter destination wallet address:");
+    return;
+  }
 
-        const keyboard = new InlineKeyboard()
-             .text("✅ Confirm Withdraw", "confirm_withdraw")
-             .row()
-             .text("❌ Cancel", "cancel_withdraw");
+  /* ===== Step 2: Destination ===== */
+  if (state.step === "awaiting_address") {
 
-             const amountText = 
-                  state.amount === -1
-                    ? "ALL SOL"
-                    : `${state.amount} SOL`;
+    setWithdrawState(userId, {
+      ...state,
+      destination: text,
+      step: "confirming"
+    });
 
-                    await ctx.reply(
-                        `Withdraw Preview
-                        
-                        Amount: ${amountText}
-                        Destination: ${state.destination}
-                        
-                        confirm transaction`, 
-                        {reply_markup: keyboard}
-                    );
-    }
+    const amountText =
+      state.amount === -1
+        ? "ALL SOL"
+        : `${state.amount} SOL`;
+
+    const keyboard = new InlineKeyboard()
+      .text("✅ Confirm Withdraw", "cmd:confirmwithdraw")
+      .row()
+      .text("❌ Cancel", "cmd:cancelwithdraw");
+
+    await ctx.reply(
+`⚠ Withdrawal Preview
+
+Amount: ${amountText}
+Destination: ${text}
+
+Confirm transaction?`,
+      { reply_markup: keyboard }
+    );
+  }
 }

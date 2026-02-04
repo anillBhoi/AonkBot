@@ -15,7 +15,10 @@ import { deposit } from '../handlers/deposit.handler.js'
 import { buySolHandler } from '../handlers/buySol.handler.js'
 import { withdrawMenuHandler } from '../handlers/withdrawMenuHandler.js'
 
+/* ===== ROUTES ===== */
+
 export const routes: Record<string, (ctx: Context) => Promise<void>> = {
+
   start: startHandler,
   wallet: walletHandler,
   swap: sendHandler,
@@ -28,24 +31,45 @@ export const routes: Record<string, (ctx: Context) => Promise<void>> = {
   txs: txsHandler,
   withdraw: withdrawMenuHandler,
   help: helpHandler,
-  devnetcredit: (ctx) =>
-    import('../handlers/devnetCredit.handler.js')
-      .then(m => m.devnetCreditHandler(ctx)),
-  'devnet-credit': (ctx) =>
-    import('../handlers/devnetCredit.handler.js')
-      .then(m => m.devnetCreditHandler(ctx))
+
+  /* ===== Withdraw Flow ===== */
+
+  withdrawall: (ctx) =>
+    import('../handlers/withdrawAll.handler.js')
+      .then(m => m.withdrawAllHandler(ctx)),
+
+  withdrawx: (ctx) =>
+    import('../handlers/withdrawX.handler.js')
+      .then(m => m.withdrawXHandler(ctx)),
+
+  confirmwithdraw: (ctx) =>
+    import('../handlers/confirmWithdraw.handler.js')
+      .then(m => m.confirmWithdrawHandler(ctx)),
+
+  cancelwithdraw: (ctx) =>
+    import('../handlers/cancel.handler.js')
+      .then(m => m.cancelHandler(ctx))
 }
 
-// ✅ FIXED: Withdraw added + lock logic corrected
+
+/* ===== Mutating Commands ===== */
+
 const MUTATING_COMMANDS = new Set([
   'swap',
   'send',
   'confirm',
   'cancel',
-  'withdraw'
+  'withdraw',
+  'withdrawall',
+  'withdrawx',
+  'confirmwithdraw'
 ])
 
+
+/* ===== Command Router ===== */
+
 export async function routeCommand(ctx: Context) {
+
   const text = ctx.message?.text
   if (!text) return
 
@@ -59,9 +83,12 @@ export async function routeCommand(ctx: Context) {
   if (!userId) return
 
   try {
-    // ✅ Rate Limit Check
+
+    /* ===== Rate Limiter ===== */
     const rateKey = command.toUpperCase()
+
     if (RATE_LIMITS[rateKey as keyof typeof RATE_LIMITS]) {
+
       const limiter = createRateLimiter(userId, rateKey)
       const allowed = await limiter.isAllowed()
 
@@ -71,12 +98,13 @@ export async function routeCommand(ctx: Context) {
       }
     }
 
-    // ✅ FIXED: Lock ONLY mutating commands
+    /* ===== Lock Mutating Commands ===== */
     if (MUTATING_COMMANDS.has(command)) {
+
       const locked = await acquireLock(userId, command, 30000)
 
       if (!locked) {
-        await ctx.reply('⏳ Please wait a moment before trying again.')
+        await ctx.reply('⏳ Please wait before retrying.')
         return
       }
     }
@@ -85,6 +113,7 @@ export async function routeCommand(ctx: Context) {
     await handler(ctx)
 
   } catch (err) {
+
     const botErr = asBotError(err)
     console.error('[Router Error]', botErr.toJSON())
 

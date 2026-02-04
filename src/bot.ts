@@ -1,75 +1,64 @@
-import { Bot } from 'grammy';
-import { getOrCreateSession } from './core/session.js';
-import { routeCommand } from './core/router.js';
-import { config } from './utils/config.js';
-import { initRpcHealth, startRpcHealthCheck } from './blockchain/solana.client.js';
-import { routeCallback } from './core/routeCallback.js';
+import { Bot } from "grammy"
+import { getOrCreateSession } from "./core/session.js"
+import { routeCommand } from "./core/router.js"
+import { config } from "./utils/config.js"
+import { initRpcHealth, startRpcHealthCheck } from "./blockchain/solana.client.js"
+import { routeCallback } from "./core/routeCallback.js"
+import { withdrawConversationHandler } from "./handlers/withdrawConversation.handler.js"
+import { getWithdrawState } from "./core/state/withdraw.state.js"
 
-const bot = new Bot(config.botToken);
+const bot = new Bot(config.botToken)
 
 export async function startBot() {
 
-  console.log('[Bot] Initializing RPC endpoints...');
+  console.log("[Bot] Initializing RPC endpoints...")
+  await initRpcHealth()
+  startRpcHealthCheck()
 
-  await initRpcHealth();
-  startRpcHealthCheck();
-
-  // ✅ TEXT COMMAND ROUTING
-  bot.on('message:text', async (ctx) => {
+  /* ===============================
+     TEXT MESSAGE ROUTER (SINGLE)
+  ================================ */
+  bot.on("message:text", async (ctx) => {
     try {
+      const from = ctx.from
+      if (!from) return
 
-      const from = ctx.from;
-      if (!from) return;
-
+      // ensure session exists
       await getOrCreateSession(from.id, from.username)
-        .catch(() => null);
+        .catch(() => null)
 
-      await routeCommand(ctx);
+      const withdrawState = getWithdrawState(from.id)
+
+      // 🔒 conversation has priority
+      if (withdrawState) {
+        await withdrawConversationHandler(ctx)
+        return
+      }
+
+      // 🧭 otherwise treat as command
+      await routeCommand(ctx)
 
     } catch (err) {
-
-      console.error('[Bot Error]', err);
-
-      await ctx.reply(
-        '❌ An unexpected error occurred. Please try again.'
-      ).catch(() => {});
+      console.error("[Bot Error]", err)
+      await ctx.reply("❌ Unexpected error occurred.").catch(() => {})
     }
-  });
+  })
 
-  // ✅ CALLBACK QUERY ROUTING (Safe Wrapper)
-  bot.on('callback_query:data', async (ctx) => {
+  /* ===============================
+     INLINE BUTTON CALLBACKS
+  ================================ */
+  bot.on("callback_query:data", async (ctx) => {
     try {
-
-      await routeCallback(ctx);
-
-      // Acknowledge button click
-      await ctx.answerCallbackQuery().catch(() => {});
-
+      await routeCallback(ctx)
     } catch (err) {
-
-      console.error('[Callback Error]', err);
-
+      console.error("[Callback Error]", err)
       await ctx.answerCallbackQuery({
-        text: 'Something went wrong. Please try again.',
+        text: "Something went wrong",
         show_alert: true
-      }).catch(() => {});
+      }).catch(() => {})
     }
-  });
+  })
 
-  try {
-    await bot.start();
-    console.log('[Bot] 🚀 Running!');
-  } catch (err) {
-    console.error('[Bot Start Error]', err);
-    process.exit(1);
-  }
+  await bot.start()
+  console.log("[Bot] 🚀 Running!")
 }
-
-// ✅ GLOBAL SAFETY NETS
-process.on('unhandledRejection', (err) => {
-  console.error('[Unhandled Rejection]', err);
-});
-
-process.on('uncaughtException', (err) => {
-  console.error('[Uncaught Exception]', err);
-});
