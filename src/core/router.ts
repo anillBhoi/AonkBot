@@ -13,6 +13,7 @@ import { unknownHandler } from '../handlers/unknown.handler.js'
 import { asBotError } from './errors/botError.js'
 import { deposit } from '../handlers/deposit.handler.js'
 import { buySolHandler } from '../handlers/buySol.handler.js'
+import { withdrawMenuHandler } from '../handlers/withdrawMenuHandler.js'
 
 export const routes: Record<string, (ctx: Context) => Promise<void>> = {
   start: startHandler,
@@ -25,6 +26,7 @@ export const routes: Record<string, (ctx: Context) => Promise<void>> = {
   buysol: buySolHandler,
   deposit: deposit,
   txs: txsHandler,
+  withdraw: withdrawMenuHandler,
   help: helpHandler,
   devnetcredit: (ctx) =>
     import('../handlers/devnetCredit.handler.js')
@@ -34,8 +36,14 @@ export const routes: Record<string, (ctx: Context) => Promise<void>> = {
       .then(m => m.devnetCreditHandler(ctx))
 }
 
-
-const MUTATING_COMMANDS = new Set(['swap', 'send', 'confirm', 'cancel'])
+// ✅ FIXED: Withdraw added + lock logic corrected
+const MUTATING_COMMANDS = new Set([
+  'swap',
+  'send',
+  'confirm',
+  'cancel',
+  'withdraw'
+])
 
 export async function routeCommand(ctx: Context) {
   const text = ctx.message?.text
@@ -51,7 +59,7 @@ export async function routeCommand(ctx: Context) {
   if (!userId) return
 
   try {
-    // Check rate limit first (RATE_LIMITS keys are uppercase)
+    // ✅ Rate Limit Check
     const rateKey = command.toUpperCase()
     if (RATE_LIMITS[rateKey as keyof typeof RATE_LIMITS]) {
       const limiter = createRateLimiter(userId, rateKey)
@@ -63,9 +71,10 @@ export async function routeCommand(ctx: Context) {
       }
     }
 
-    // Apply lock for non-mutating commands
-    if (!MUTATING_COMMANDS.has(command)) {
+    // ✅ FIXED: Lock ONLY mutating commands
+    if (MUTATING_COMMANDS.has(command)) {
       const locked = await acquireLock(userId, command, 30000)
+
       if (!locked) {
         await ctx.reply('⏳ Please wait a moment before trying again.')
         return
@@ -74,6 +83,7 @@ export async function routeCommand(ctx: Context) {
 
     const handler = routes[command] ?? unknownHandler
     await handler(ctx)
+
   } catch (err) {
     const botErr = asBotError(err)
     console.error('[Router Error]', botErr.toJSON())
