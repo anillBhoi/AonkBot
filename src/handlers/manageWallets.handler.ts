@@ -8,8 +8,6 @@ export async function manageWalletsHandler(ctx: Context) {
   if (!userId) return
 
   try {
-    await ctx.reply('⏳ Loading wallets...')
-
     const wallets = await getUserWallets(userId)
     const selected = await getSelectedWallet(userId)
 
@@ -69,7 +67,7 @@ export async function manageWalletsHandler(ctx: Context) {
     })
 
     kb.text('➕ Create Wallet', 'wallet_create').row()
-    kb.text('Close', 'cmd:wallet')
+    kb.text('Close', 'close')
 
     await ctx.reply(message, {
       parse_mode: 'Markdown',

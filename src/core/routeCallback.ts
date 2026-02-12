@@ -18,6 +18,16 @@ export async function routeCallback(ctx: Context) {
   await ctx.answerCallbackQuery().catch(() => {})
 
   /* ==================================================
+     CLOSE CALLBACK (Handle BEFORE other routes)
+  =================================================== */
+
+  if (data === 'close') {
+    // Delete the message smoothly
+    await ctx.deleteMessage().catch(() => {})
+    return
+  }
+
+  /* ==================================================
      WALLET CALLBACKS (Handle BEFORE cmd routing)
   =================================================== */
 

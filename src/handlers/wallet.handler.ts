@@ -7,12 +7,15 @@ export async function walletHandler(ctx: Context): Promise<void> {
   const userId = ctx.from?.id
   if (!userId) return
 
+  let loadingMsg: any | undefined
   try {
-    // Show loading state
-    await ctx.reply('💼 *Loading wallet...*', { parse_mode: 'Markdown' })
+    // Show loading state and keep reference so we can remove it later
+    loadingMsg = await ctx.reply('💼 *Loading wallet...*', { parse_mode: 'Markdown' })
 
     const wallet = await getSelectedWallet(userId)
     if (!wallet) {
+      // remove loading indicator before returning
+      try { if (loadingMsg?.chat && loadingMsg?.message_id) await ctx.api.deleteMessage(loadingMsg.chat.id, loadingMsg.message_id) } catch {}
       await ctx.reply('❌ No wallet selected. Use /wallet to select one.').catch(() => {})
       return
     }
@@ -54,8 +57,13 @@ export async function walletHandler(ctx: Context): Promise<void> {
       // { parse_mode: 'Markdown' }
        { reply_markup: walletMenu }
     )
+    // remove loading indicator now that final message is sent
+    try { if (loadingMsg?.chat && loadingMsg?.message_id) await ctx.api.deleteMessage(loadingMsg.chat.id, loadingMsg.message_id) } catch {}
   } catch (err: any) {
     console.error('[Wallet Handler Error]', err)
+    // remove loading indicator on error if present
+    try { if (loadingMsg?.chat && loadingMsg?.message_id) await ctx.api.deleteMessage(loadingMsg.chat.id, loadingMsg.message_id) } catch {}
+
     await ctx.reply(
       `⚠️ Unable to fetch wallet details\n\n` +
       `Error: ${err.message}\n` +

@@ -2,7 +2,7 @@ import { InlineKeyboard } from 'grammy'
 
 export const walletMenu = new InlineKeyboard()
   .text('View on Solscan', 'cmd:txs')
-  .text('Close', 'cmd:wallet')
+  .text('Close', 'close')
   .row()
   .text('Deposit SOL', 'cmd:deposit')
   .text('Buy SOL', 'cmd:buysol')
@@ -10,8 +10,7 @@ export const walletMenu = new InlineKeyboard()
   .text('Withdraw all SOL', 'cmd:withdraw')
   .text('Withdraw X SOL', 'cmd:withdraw')
   .row()
- .text('Manage Wallets', 'cmd:managewallets')
-
+  .text('Manage Wallets', 'cmd:managewallets')
   .text('Manage Tokens', 'cmd:wallet')
   .row()
   .text('Reset All Wallets', 'cmd:wallet')
