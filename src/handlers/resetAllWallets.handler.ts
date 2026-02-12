@@ -56,7 +56,7 @@ export const resetAllWalletsHandler = async (ctx: Context): Promise<void> => {
 
         // Send recommendation message separately - matching BonkBot style
         const recommendationKeyboard = new InlineKeyboard()
-            .text('RECOMMENDED: Export Seed Phrase', 'cmd:wallet');
+            .text('RECOMMENDED: Export Seed Phrase', 'cmd:exportphrase');
 
         await ctx.reply('RECOMMENDED: Export Seed Phrase', {
             reply_markup: recommendationKeyboard,

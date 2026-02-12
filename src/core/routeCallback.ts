@@ -5,6 +5,7 @@ import { acquireLock } from './locks.js'
 import { walletSelectHandler } from '../handlers/walletSelect.handler.js'
 import { createWalletHandler } from '../handlers/createWallet.handler.js'
 import { resetConfirmHandler, resetCancelHandler } from '../handlers/resetAllWallets.handler.js'
+import { exportConfirmHandler, exportCancelHandler } from '../handlers/exportSeedPhrase.handler.js'
 
 
 export async function routeCallback(ctx: Context) {
@@ -50,6 +51,18 @@ export async function routeCallback(ctx: Context) {
 
   if (data === 'reset:cancel') {
     return resetCancelHandler(ctx)
+  }
+
+  /* ==================================================
+     EXPORT SEED PHRASE CALLBACKS
+  =================================================== */
+
+  if (data === 'export:confirm') {
+    return exportConfirmHandler(ctx)
+  }
+
+  if (data === 'export:cancel') {
+    return exportCancelHandler(ctx)
   }
 
   /* ==================================================
