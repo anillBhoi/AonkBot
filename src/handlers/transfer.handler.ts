@@ -1,5 +1,5 @@
 import { Context } from 'grammy'
-import { getOrCreateWallet } from '../blockchain/wallet.service.js'
+import { createWallet } from "../blockchain/wallet.service.js";
 import { createConfirmation } from '../core/confirmations/confirmation.service.js'
 import { validateAmount } from '../core/validators/amount.validator.js'
 import { validateSolanaAddress } from '../core/validators/solanaAddress.validator.js'

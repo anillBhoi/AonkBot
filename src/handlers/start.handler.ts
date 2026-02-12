@@ -1,5 +1,5 @@
 import { Context } from 'grammy'
-import { getOrCreateWallet } from '../blockchain/wallet.service.js'
+import { getOrCreateWallet } from "../blockchain/wallet.service.js"
 import { config } from '../utils/config.js'
 import { mainMenuKeyboard } from '../ui/mainMenu.keyboard.js'
 

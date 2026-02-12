@@ -1,5 +1,5 @@
 import { Context } from 'grammy'
-import { getOrCreateWallet } from '../blockchain/wallet.service.js'
+import { getOrCreateWallet } from "../blockchain/wallet.service.js";
 import { getRecentTransactions } from '../blockchain/tx.service.js'
 import { redis } from '../config/redis.js'
 import { config } from '../utils/config.js'

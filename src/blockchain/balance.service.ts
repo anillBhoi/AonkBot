@@ -1,7 +1,8 @@
-import { PublicKey } from '@solana/web3.js'
+import { PublicKey, Connection, LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { solana } from './solana.client.js'
 import { redis } from '../config/redis.js'
 import { TOKENS } from '../utils/tokens.js'
+import { config } from '../utils/config.js'
 
 const BALANCE_CACHE_TTL = 10 // seconds
 
@@ -34,6 +35,42 @@ export async function getSolBalance(
   } catch (err) {
     console.error('[Balance Error]', err)
     throw new Error('Failed to fetch SOL balance')
+  }
+}
+
+/**
+ * Get SOL balance from both mainnet and devnet
+ */
+export async function getSolBalanceMultiNetwork(
+  publicKey: string
+): Promise<{ mainnet: number; devnet: number }> {
+  try {
+    const pubKey = new PublicKey(publicKey)
+
+    // Get mainnet balance
+    let mainnetBalance = 0
+    try {
+      const mainnetConnection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed')
+      const lamports = await mainnetConnection.getBalance(pubKey, 'confirmed')
+      mainnetBalance = lamports / LAMPORTS_PER_SOL
+    } catch (err) {
+      console.log('[Mainnet Balance Error]', err)
+    }
+
+    // Get devnet balance
+    let devnetBalance = 0
+    try {
+      const devnetConnection = new Connection('https://api.devnet.solana.com', 'confirmed')
+      const lamports = await devnetConnection.getBalance(pubKey, 'confirmed')
+      devnetBalance = lamports / LAMPORTS_PER_SOL
+    } catch (err) {
+      console.log('[Devnet Balance Error]', err)
+    }
+
+    return { mainnet: mainnetBalance, devnet: devnetBalance }
+  } catch (err) {
+    console.error('[Multi-Network Balance Error]', err)
+    return { mainnet: 0, devnet: 0 }
   }
 }
 

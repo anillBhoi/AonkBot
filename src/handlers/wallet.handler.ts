@@ -1,5 +1,5 @@
 import { Context } from 'grammy'
-import { getOrCreateWallet } from '../blockchain/wallet.service.js'
+import { getSelectedWallet } from '../blockchain/wallet.service.js'
 import { getSolBalance, getTokenBalances } from '../blockchain/balance.service.js'
 import { walletMenu } from '../ui/walletMenu.js'
 
@@ -11,7 +11,12 @@ export async function walletHandler(ctx: Context): Promise<void> {
     // Show loading state
     await ctx.reply('💼 *Loading wallet...*', { parse_mode: 'Markdown' })
 
-    const wallet = await getOrCreateWallet(userId)
+    const wallet = await getSelectedWallet(userId)
+    if (!wallet) {
+      await ctx.reply('❌ No wallet selected. Use /wallet to select one.').catch(() => {})
+      return
+    }
+
     const solBalance = await getSolBalance(wallet.publicKey)
 
     // Try to fetch token balances
@@ -39,6 +44,7 @@ export async function walletHandler(ctx: Context): Promise<void> {
 
     await ctx.reply(
       `💼 *Your Wallet*\n\n` +
+      `*${wallet.name}*\n\n` +
       `📍 Address: \`${shortAddress}\`\n\n` +
       `⭐ SOL Balance: *${solBalance.toFixed(4)} SOL*` +
       tokenBalancesText +

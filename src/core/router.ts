@@ -48,75 +48,33 @@ export const routes: Record<string, (ctx: Context) => Promise<void>> = {
 
   cancelwithdraw: (ctx) =>
     import('../handlers/cancel.handler.js')
-      .then(m => m.cancelHandler(ctx))
+      .then(m => m.cancelHandler(ctx)),
+
+  /* ===== Manage Wallets ===== */
+
+  managewallets: (ctx) =>
+    import('../handlers/manageWallets.handler.js')
+      .then(m => m.manageWalletsHandler(ctx)),
 }
 
+/* ===== COMMAND ROUTER ===== */
+export async function routeCommand(ctx: Context): Promise<void> {
+  const message = ctx.message?.text
+  if (!message) return
 
-/* ===== Mutating Commands ===== */
+  const commandMatch = message.match(/^\/([a-z]+)/)
+  const command = commandMatch ? commandMatch[1].toLowerCase() : message.split(' ')[0].toLowerCase()
 
-const MUTATING_COMMANDS = new Set([
-  'swap',
-  'send',
-  'confirm',
-  'cancel',
-  'withdraw',
-  'withdrawall',
-  'withdrawx',
-  'confirmwithdraw'
-])
-
-
-/* ===== Command Router ===== */
-
-export async function routeCommand(ctx: Context) {
-
-  const text = ctx.message?.text
-  if (!text) return
-
-  const command = text
-    .trim()
-    .split(' ')[0]
-    .replace('/', '')
-    .split('@')[0]
-
-  const userId = ctx.from?.id
-  if (!userId) return
-
-  try {
-
-    /* ===== Rate Limiter ===== */
-    const rateKey = command.toUpperCase()
-
-    if (RATE_LIMITS[rateKey as keyof typeof RATE_LIMITS]) {
-
-      const limiter = createRateLimiter(userId, rateKey)
-      const allowed = await limiter.isAllowed()
-
-      if (!allowed) {
-        await ctx.reply(limiter.getMessage())
-        return
-      }
+  const handler = routes[command]
+  if (handler) {
+    try {
+      await handler(ctx)
+    } catch (error) {
+      const botError = asBotError(error)
+      console.error(`[Route Error: ${command}]`, botError.message)
+      await ctx.reply(`❌ ${botError.message}`).catch(() => {})
     }
-
-    /* ===== Lock Mutating Commands ===== */
-    if (MUTATING_COMMANDS.has(command)) {
-
-      const locked = await acquireLock(userId, command, 30000)
-
-      if (!locked) {
-        await ctx.reply('⏳ Please wait before retrying.')
-        return
-      }
-    }
-
-    const handler = routes[command] ?? unknownHandler
-    await handler(ctx)
-
-  } catch (err) {
-
-    const botErr = asBotError(err)
-    console.error('[Router Error]', botErr.toJSON())
-
-    await ctx.reply(botErr.getUserMessage())
+  } else {
+    await unknownHandler(ctx)
   }
 }
