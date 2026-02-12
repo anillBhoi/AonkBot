@@ -18,9 +18,17 @@ export async function manageWalletsHandler(ctx: Context) {
 
     // Get balances for all wallets on both networks
     const walletBalances = await Promise.all(
-      wallets.map(async (w) => ({
+      wallets.map(async (w, idx) => ({
         wallet: w,
-        balances: await getSolBalanceMultiNetwork(w.publicKey)
+        balances: await getSolBalanceMultiNetwork(w.publicKey),
+        // sanitize display name: prefer provided name, but fall back to W{n}
+        displayName: (function () {
+          const n = w.name?.toString().trim()
+          if (!n) return `W${idx + 1}`
+          // don't show names that look like commands
+          if (n.startsWith('/')) return `W${idx + 1}`
+          return n
+        })()
       }))
     )
 
@@ -33,8 +41,10 @@ export async function manageWalletsHandler(ctx: Context) {
         (wb) => wb.wallet.walletId === selected.walletId
       )?.balances || { mainnet: 0, devnet: 0 }
 
+      const selDisplay = (selected.name && !selected.name.startsWith('/')) ? selected.name : `W${wallets.findIndex(w => w.walletId === selected.walletId) + 1}`
+
       message += '*Selected Wallet*\n'
-      message += `✅ ${selected.name}: ${selected.publicKey}\n`
+      message += `✅ ${selDisplay}: ${selected.publicKey}\n`
       message += `📍 Mainnet: *${selectedBalance.mainnet.toFixed(4)} SOL*\n`
       message += `🔵 Devnet: *${selectedBalance.devnet.toFixed(4)} SOL*\n`
       message += '\n'
@@ -45,7 +55,8 @@ export async function manageWalletsHandler(ctx: Context) {
     walletBalances.forEach((wb) => {
       const isSelected = selected && selected.walletId === wb.wallet.walletId
       const checkmark = isSelected ? '✅' : '  '
-      message += `${checkmark} ${wb.wallet.name}: ${wb.wallet.publicKey}\n`
+      const nameToShow = wb.displayName || `W${wallets.findIndex(w => w.walletId === wb.wallet.walletId) + 1}`
+      message += `${checkmark} ${nameToShow}: ${wb.wallet.publicKey}\n`
       message += `   📍 Mainnet: *${wb.balances.mainnet.toFixed(4)} SOL*\n`
       message += `   🔵 Devnet: *${wb.balances.devnet.toFixed(4)} SOL*\n`
     })
@@ -58,10 +69,10 @@ export async function manageWalletsHandler(ctx: Context) {
       const isSelected = selected && selected.walletId === wb.wallet.walletId
       const checkmark = isSelected ? '✅' : '  '
       
-      // Show wallet name and both balances in button
+      // Show sanitized display name and both balances in button
       const mainnetLabel = `${wb.balances.mainnet.toFixed(2)}M`
       const devnetLabel = `${wb.balances.devnet.toFixed(2)}D`
-      const label = `${checkmark} ${wb.wallet.name} - ${mainnetLabel} / ${devnetLabel}`
+      const label = `${checkmark} ${wb.displayName} - ${mainnetLabel} / ${devnetLabel}`
 
       kb.text(label, `wallet_select:${wb.wallet.walletId}`).row()
     })

@@ -44,10 +44,11 @@ export async function walletHandler(ctx: Context): Promise<void> {
     }
 
     const shortAddress = wallet.publicKey.slice(0, 8) + '...' + wallet.publicKey.slice(-8)
+    const displayName = (wallet.name && !wallet.name.startsWith('/')) ? wallet.name : `Wallet ${shortAddress}`
 
     await ctx.reply(
       `💼 *Your Wallet*\n\n` +
-      `*${wallet.name}*\n\n` +
+      `*${displayName}*\n\n` +
       `📍 Address: \`${shortAddress}\`\n\n` +
       `⭐ SOL Balance: *${solBalance.toFixed(4)} SOL*` +
       tokenBalancesText +

@@ -26,6 +26,22 @@ export async function handleWalletNaming(ctx: Context) {
 
   const walletName = ctx.message.text.trim()
 
+  // If user sent a command while naming, handle specially
+  if (walletName.startsWith('/')) {
+    if (walletName.toLowerCase() === '/cancel') {
+      // clear naming state and notify
+      await redis.del(`wallet:naming:${userId}`)
+      await ctx.reply('❌ Wallet creation canceled.').catch(() => {})
+      // show wallets menu to return user to wallet selection
+      await manageWalletsHandler(ctx).catch(() => {})
+      return
+    }
+
+    // For other commands while naming, ask user to send a plain name or /cancel
+    await ctx.reply('Please reply with the wallet name (no leading /). Send /cancel to abort.').catch(() => {})
+    return
+  }
+
   // Validate name length
   if (walletName.length < 1 || walletName.length > 20) {
     await ctx.reply('❌ Wallet name must be 1-20 characters long.')
