@@ -130,3 +130,31 @@ export async function loadWalletSigner(
 
   return Keypair.fromSecretKey(bs58.decode(secret))
 }
+
+export async function getAllWallets(telegramId: number): Promise<UserWallet[] | null> {
+  const wallets = await getUserWallets(telegramId);
+  return wallets.length > 0 ? wallets : null;
+}
+
+export async function resetAllWalletsInDb(telegramId: number): Promise<void> {
+  const selectedKey = redisKeys.selectedWallet(telegramId);
+  
+  // ⚠️ IMPORTANT: This only deletes wallet credentials from the local database (Redis)
+  // The SOL and tokens on the Solana blockchain remain at the old address FOREVER
+  // Without the private key (backed up seed phrase), the user loses access and cannot recover them
+  // This is permanent loss if seed phrase was not exported
+  
+  // Get all wallet IDs and delete individual wallets
+  const walletIds = await redis.smembers(`wallets:${telegramId}`);
+  for (const walletId of walletIds) {
+    const walletKey = redisKeys.wallet(telegramId, walletId);
+    await redis.del(walletKey);
+  }
+  
+  // Delete the wallet set and selected wallet
+  await redis.del(`wallets:${telegramId}`);
+  await redis.del(selectedKey);
+  
+  // Create a new default wallet
+  await createWallet(telegramId);
+}

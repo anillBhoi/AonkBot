@@ -15,6 +15,7 @@ import { deposit } from '../handlers/deposit.handler.js'
 import { buySolHandler } from '../handlers/buySol.handler.js'
 import { withdrawMenuHandler } from '../handlers/withdrawMenuHandler.js'
 import { manageToken } from '../handlers/manageTokens.handler.js'
+import { resetAllWalletsHandler } from '../handlers/resetAllWallets.handler.js'
 
 /* ===== ROUTES ===== */
 
@@ -57,6 +58,8 @@ export const routes: Record<string, (ctx: Context) => Promise<void>> = {
   managewallets: (ctx) =>
     import('../handlers/manageWallets.handler.js')
       .then(m => m.manageWalletsHandler(ctx)),
+
+  resetwallets: resetAllWalletsHandler,
 }
 
 /* ===== COMMAND ROUTER ===== */

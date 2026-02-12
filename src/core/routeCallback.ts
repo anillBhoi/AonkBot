@@ -4,6 +4,7 @@ import { unknownHandler } from '../handlers/unknown.handler.js'
 import { acquireLock } from './locks.js'
 import { walletSelectHandler } from '../handlers/walletSelect.handler.js'
 import { createWalletHandler } from '../handlers/createWallet.handler.js'
+import { resetConfirmHandler, resetCancelHandler } from '../handlers/resetAllWallets.handler.js'
 
 
 export async function routeCallback(ctx: Context) {
@@ -37,6 +38,18 @@ export async function routeCallback(ctx: Context) {
 
     if (data === 'wallet_create') {
     return createWalletHandler(ctx)
+  }
+
+  /* ==================================================
+     RESET CALLBACKS
+  =================================================== */
+
+  if (data === 'reset:confirm') {
+    return resetConfirmHandler(ctx)
+  }
+
+  if (data === 'reset:cancel') {
+    return resetCancelHandler(ctx)
   }
 
   /* ==================================================
