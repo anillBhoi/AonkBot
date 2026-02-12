@@ -14,6 +14,7 @@ import { asBotError } from './errors/botError.js'
 import { deposit } from '../handlers/deposit.handler.js'
 import { buySolHandler } from '../handlers/buySol.handler.js'
 import { withdrawMenuHandler } from '../handlers/withdrawMenuHandler.js'
+import { manageToken } from '../handlers/manageTokens.handler.js'
 
 /* ===== ROUTES ===== */
 
@@ -31,6 +32,7 @@ export const routes: Record<string, (ctx: Context) => Promise<void>> = {
   txs: txsHandler,
   withdraw: withdrawMenuHandler,
   help: helpHandler,
+  managetkn: manageToken,
 
   /* ===== Withdraw Flow ===== */
 
