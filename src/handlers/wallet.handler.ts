@@ -1,7 +1,8 @@
 import { Context } from 'grammy'
 import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { getSelectedWallet } from '../blockchain/wallet.service.js'
-
+// import { buildWalletKeyboard } from '../ui/walletMenu.keyboard.js'
+// 'solana' is the exported Connection instance — aliased for clarity
 import { solana as rpcConnection } from '../blockchain/solana.client.js'
 import { buildWalletKeyboard } from '../ui/walletMenu.js'
 
@@ -47,7 +48,6 @@ function buildWalletMessage(params: {
   const { walletName, publicKey, solBalance, refreshedAt } = params
 
   const shortAddress = shortenAddress(publicKey)
-  const solscanUrl = `https://solscan.io/account/${publicKey}`
 
   // Timestamp line shown only on refreshes (matches BonkBot behaviour)
   const timestampLine = refreshedAt
@@ -97,7 +97,7 @@ export const walletHandler = async (ctx: Context): Promise<void> => {
 
     await ctx.reply(text, {
       parse_mode: 'Markdown',
-      reply_markup: buildWalletKeyboard(),
+      reply_markup: buildWalletKeyboard(wallet.publicKey),
     })
   } catch (err) {
     console.error('[wallet] walletHandler error:', err)
@@ -142,7 +142,7 @@ export const walletRefreshHandler = async (ctx: Context): Promise<void> => {
     //    editMessageText throws if the content hasn't changed — catch silently.
     await ctx.editMessageText(newText, {
       parse_mode: 'Markdown',
-      reply_markup: buildWalletKeyboard(),
+      reply_markup: buildWalletKeyboard(wallet.publicKey),
     }).catch((err: Error) => {
       // Telegram error 400: "message is not modified" — ignore it
       if (!err.message?.includes('message is not modified')) {
@@ -155,36 +155,5 @@ export const walletRefreshHandler = async (ctx: Context): Promise<void> => {
       text: '❌ Refresh failed. Please try again.',
       show_alert: true,
     }).catch(() => {})
-  }
-}
-
-/* ─────────────────────────────────────────────
-   wallet:solscan callback handler
-   Opens Solscan URL via an alert (Telegram
-   doesn't support opening URLs from callbacks
-   without a button, but we can show the URL).
-───────────────────────────────────────────── */
-
-export const walletSolscanHandler = async (ctx: Context): Promise<void> => {
-  const userId = ctx.from?.id
-  if (!userId) return
-
-  try {
-    const wallet = await getSelectedWallet(userId)
-    if (!wallet) {
-      await ctx.answerCallbackQuery({ text: '❌ No wallet found', show_alert: true }).catch(() => {})
-      return
-    }
-
-    // Open Solscan directly using a URL button is the correct approach
-    // (handled in the keyboard via url() — see note below).
-    // This fallback fires if somehow the callback route is hit instead.
-    await ctx.answerCallbackQuery({
-      text: `https://solscan.io/account/${wallet.publicKey}`,
-      show_alert: true,
-    }).catch(() => {})
-  } catch (err) {
-    console.error('[wallet] walletSolscanHandler error:', err)
-    await ctx.answerCallbackQuery({ text: '❌ Error', show_alert: true }).catch(() => {})
   }
 }

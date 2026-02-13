@@ -9,7 +9,7 @@ export async function withdrawMenuHandler(ctx: Context) {
 
   const wallet = await getOrCreateWallet(userId);
   const balance = await getSolBalance(wallet.publicKey);
-
+  
   const keyboard = new InlineKeyboard()
     .text("Withdraw All SOL", "cmd:withdrawall")
     .row()

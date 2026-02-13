@@ -24,7 +24,39 @@ import {
   regenerateTOTPHandler,
   confirmRegenerateTOTP,
 } from '../handlers/onboarding.handler.js'
-import { walletRefreshHandler, walletSolscanHandler } from '../handlers/wallet.handler.js'
+import { walletRefreshHandler } from '../handlers/wallet.handler.js'
+import { redis } from '../config/redis.js'
+import { clearWithdrawState } from './state/withdraw.state.js'
+import { redisKeys } from '../utils/redisKeys.js'
+
+/**
+ * ✅ FIX: Clear ALL conversational states to prevent input conflicts
+ * This is called whenever a user clicks a button (wallet select, create, etc.)
+ */
+async function clearAllConversationalStates(userId: number): Promise<void> {
+  try {
+    // Clear in-memory withdraw state
+    clearWithdrawState(userId)
+    
+    // Clear all Redis-based conversational states
+    await Promise.all([
+      // Clear wallet naming state
+      redis.del(`wallet:naming:${userId}`),
+      
+      // Clear export states
+      redis.del(redisKeys.exportAwaitTotp(userId)),
+      redis.del(redisKeys.exportStage(userId)),
+      redis.del(redisKeys.exportChoosingQuestion(userId)),
+      redis.del(redisKeys.totpRegenAwait(userId)),
+      
+      // Clear 2FA verification state
+      redis.del(redisKeys.verifying2FA(userId)),
+      redis.del(redisKeys.settingUp2FA(userId)),
+    ])
+  } catch (err) {
+    console.error('[Clear states error]', err)
+  }
+}
 
 export async function routeCallback(ctx: Context): Promise<void> {
   const data = ctx.callbackQuery?.data
@@ -39,7 +71,6 @@ export async function routeCallback(ctx: Context): Promise<void> {
      All other routes get a silent ack here.
   ──────────────────────────────────────────────────────────── */
   if (data === 'wallet:refresh') return walletRefreshHandler(ctx)
-  if (data === 'wallet:solscan') return walletSolscanHandler(ctx)
 
   /* Silently ack all other callbacks */
   await ctx.answerCallbackQuery().catch(() => {})
@@ -51,8 +82,16 @@ export async function routeCallback(ctx: Context): Promise<void> {
   }
 
   /* ─── Wallet select / create ─── */
-  if (data.startsWith('wallet_select:')) return walletSelectHandler(ctx)
-  if (data === 'wallet_create') return createWalletHandler(ctx)
+  if (data.startsWith('wallet_select:')) {
+    // Clear all conversational states
+    await clearAllConversationalStates(userId)
+    return walletSelectHandler(ctx)
+  }
+  if (data === 'wallet_create') {
+    // Clear all conversational states before creating new wallet
+    await clearAllConversationalStates(userId)
+    return createWalletHandler(ctx)
+  }
 
   /* ─── Reset ─── */
   if (data === 'reset:confirm') return resetConfirmHandler(ctx)
