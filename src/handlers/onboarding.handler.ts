@@ -325,7 +325,11 @@ export const skipOnboarding = async (ctx: Context): Promise<void> => {
 }
 
 /* ─────────────────────────────────────────────
-   Regenerate TOTP (prompt)
+   /totpsetup — Regenerate authenticator
+   SECURITY: requires the user to verify their
+   CURRENT code before a new secret is issued.
+   This prevents an attacker with Telegram access
+   from hijacking the TOTP slot.
 ───────────────────────────────────────────── */
 
 export const regenerateTOTPHandler = async (ctx: Context): Promise<void> => {
@@ -333,28 +337,85 @@ export const regenerateTOTPHandler = async (ctx: Context): Promise<void> => {
   if (!userId) return
 
   try {
+    const existingSecret = await getSecret(userId)
+
+    if (!existingSecret) {
+      // No secret yet — just do normal first-time setup
+      await initiate2FASetup(ctx)
+      return
+    }
+
+    // User has an existing secret → require current code first
     const message =
       `🔄 REGENERATE AUTHENTICATOR\n\n` +
-      `This will create a NEW 2FA setup.\n\n` +
-      `⚠️ WARNING:\n` +
-      `• Old backup codes will NO LONGER work\n` +
-      `• You must scan the new QR code\n` +
-      `• Save the new backup codes\n\n` +
-      `Continue?`
+      `This will replace your current 2FA with a new QR code.\n\n` +
+      `⚠️ To confirm this is really you, enter the 6-digit code\n` +
+      `currently shown in your Google Authenticator app:\n\n` +
+      `(This prevents anyone who only has your Telegram from hijacking your 2FA)`
 
-    const keyboard = new InlineKeyboard()
-      .text('✅ Yes, regenerate', 'onboarding:confirm_regenerate')
-      .text('❌ Cancel', 'onboarding:cancel')
+    await ctx.reply(message)
 
-    await ctx.reply(message, { reply_markup: keyboard })
+    // Mark that we are awaiting a code specifically to authorise regen
+    await redis.set(redisKeys.totpRegenAwait(userId), '1', 'EX', 300)
   } catch (err) {
     console.error('Error in regenerate TOTP handler:', err)
     await ctx.reply('❌ Error. Please try again.')
   }
 }
 
+/**
+ * Called from bot.ts text router when totpRegenAwait flag is set.
+ * Verifies the current code, then generates a fresh secret + QR.
+ */
+export const verifyAndRegenTOTP = async (ctx: Context): Promise<void> => {
+  const userId = ctx.from?.id
+  const text = ctx.message?.text?.trim()
+  if (!userId || !text) return
+
+  try {
+    // Only accept a 6-digit code here (not backup codes —
+    // if they've lost the phone they need support, not self-service regen)
+    if (!/^[0-9]{6}$/.test(text)) {
+      await ctx.reply('❌ Please enter the 6-digit code from your authenticator app.')
+      return
+    }
+
+    const isValid = await verifyToken(userId, text)
+
+    if (!isValid) {
+      const attempts = await redis.incr(redisKeys.totpRegenAttempts(userId))
+      if (attempts === 1) await redis.expire(redisKeys.totpRegenAttempts(userId), 300)
+
+      if (attempts >= 3) {
+        await redis.del(redisKeys.totpRegenAwait(userId))
+        await redis.del(redisKeys.totpRegenAttempts(userId))
+        await ctx.reply('⛔ Too many failed attempts. Regeneration cancelled.')
+        return
+      }
+
+      await ctx.reply(`❌ Invalid code (${attempts}/3 attempts). Try again:`)
+      return
+    }
+
+    // ✅ Current code verified — safe to issue a new secret
+    await redis.del(redisKeys.totpRegenAwait(userId))
+    await redis.del(redisKeys.totpRegenAttempts(userId))
+
+    // Wipe old secret
+    await redis.del(redisKeys.totpSecret(userId))
+    await redis.del(redisKeys.totpBackupCodes(userId))
+
+    await ctx.reply('✅ Identity confirmed. Generating new authenticator...')
+    await initiate2FASetup(ctx)
+  } catch (err) {
+    console.error('Error verifying code for TOTP regen:', err)
+    await ctx.reply('❌ Error. Please try again.')
+  }
+}
+
 /* ─────────────────────────────────────────────
-   Confirm TOTP regeneration
+   Confirm TOTP regeneration (callback - kept for
+   backward compat but now unreachable from export)
 ───────────────────────────────────────────── */
 
 export const confirmRegenerateTOTP = async (ctx: Context): Promise<void> => {
@@ -363,14 +424,10 @@ export const confirmRegenerateTOTP = async (ctx: Context): Promise<void> => {
 
   try {
     await ctx.answerCallbackQuery().catch(() => {})
-
-    // Delete old secret so initiate2FASetup generates a fresh one
-    await redis.del(redisKeys.totpSecret(userId))
-    await redis.del(redisKeys.totpBackupCodes(userId))
-
-    await initiate2FASetup(ctx)
+    // Redirect to the safe regen path (requires current code)
+    await regenerateTOTPHandler(ctx)
   } catch (err) {
     console.error('Error confirming TOTP regeneration:', err)
-    await ctx.reply('❌ Error regenerating 2FA. Please try again.')
+    await ctx.reply('❌ Error. Please try again.')
   }
 }

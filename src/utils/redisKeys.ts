@@ -49,4 +49,11 @@ export const redisKeys = {
   settingUp2FA: (id: number) => `user:setting_up_2fa:${id}`,
   verifying2FA: (id: number) => `user:verifying_2fa:${id}`,
   verify2FAAttempts: (id: number) => `user:2fa_verify_attempts:${id}`,
+
+  /* ===== /totpsetup regen (requires current code to authorise) ===== */
+
+  // Set when user runs /totpsetup and already has a secret.
+  // They must supply the current 6-digit code before a new QR is issued.
+  totpRegenAwait: (id: number) => `totp:regen:await:${id}`,
+  totpRegenAttempts: (id: number) => `totp:regen:attempts:${id}`,
 }

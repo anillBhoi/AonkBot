@@ -9,7 +9,7 @@ import { getWithdrawState } from './core/state/withdraw.state.js'
 import { handleWalletNaming } from './handlers/createWallet.handler.js'
 import { totpMessageHandler } from './handlers/totp.handler.js'
 import { verifySecurityQuestionHandler, verifyTOTPForExportHandler } from './handlers/exportSeedPhraseSecure.handler.js'
-import { verify2FACode } from './handlers/onboarding.handler.js'
+import { verify2FACode, verifyAndRegenTOTP } from './handlers/onboarding.handler.js'
 import { redis } from './config/redis.js'
 import { redisKeys } from './utils/redisKeys.js'
 
@@ -35,6 +35,13 @@ export async function startBot() {
       const awaitingExportTotp = await redis.get(redisKeys.exportAwaitTotp(from.id))
       if (awaitingExportTotp) {
         await totpMessageHandler(ctx)
+        return
+      }
+
+      /* ─── 1b. /totpsetup regen — verify current code before issuing new QR ─── */
+      const awaitingRegenVerify = await redis.get(redisKeys.totpRegenAwait(from.id))
+      if (awaitingRegenVerify) {
+        await verifyAndRegenTOTP(ctx)
         return
       }
 

@@ -1,13 +1,16 @@
-import { Context, InlineKeyboard, InputFile } from 'grammy'
+import { Context, InlineKeyboard } from 'grammy'
 import { getSelectedWallet, loadWalletSigner } from '../blockchain/wallet.service.js'
 import bs58 from 'bs58'
 import { redis } from '../config/redis.js'
 import { redisKeys } from '../utils/redisKeys.js'
-import { generateAndSaveSecret, getSecret } from '../auth/totp.service.js'
-import QRCode from 'qrcode'
+import { getSecret } from '../auth/totp.service.js'
 
 /**
- * STEP 1: Show warning and confirmation dialog before revealing seed phrase
+ * STEP 1: Show warning and confirmation dialog before revealing seed phrase.
+ *
+ * SECURITY: We check upfront whether the user has completed TOTP setup.
+ * If not, we block the export entirely and send them to onboarding.
+ * This prevents QR generation from ever happening inside the export flow.
  */
 export const exportSeedPhraseHandler = async (ctx: Context): Promise<void> => {
   const userId = ctx.from?.id
@@ -20,31 +23,36 @@ export const exportSeedPhraseHandler = async (ctx: Context): Promise<void> => {
       return
     }
 
+    // ─── SECURITY GATE: block export if 2FA was never set up ───
+    const secret = await getSecret(userId)
+    if (!secret) {
+      await ctx.reply(
+        '🔐 EXPORT BLOCKED\n\n' +
+          'You must set up Google Authenticator before exporting your seed phrase.\n\n' +
+          'This protects your wallet even if someone else has access to your Telegram.\n\n' +
+          'Run /totpsetup to complete your 2FA setup first.',
+        {
+          reply_markup: new InlineKeyboard().text('🔐 Setup 2FA Now', 'onboarding:start_2fa'),
+        }
+      )
+      return
+    }
+
     const confirmKeyboard = new InlineKeyboard()
       .text('Cancel', 'export:cancel')
       .text('I understand, export seed phrase', 'export:confirm')
 
-    const warningMessage = `🔐 Export Seed Phrase
-
-⚠️ WARNING: This reveals your private seed phrase!
-
-Your seed phrase is the key to your wallet. Anyone with this phrase can access and steal your funds.
-
-✅ SAFE to share with:
-- Yourself (backup)
-- Hardware wallet (import)
-
-❌ NEVER share with:
-- Anyone online
-- Suspicious links
-- Screenshots
-
-Once you export, keep it safe. We recommend:
-1. Write it down on paper
-2. Store in a safe place
-3. Never store digitally
-
-Do you understand and want to proceed?`
+    const warningMessage =
+      `🔐 Export Seed Phrase\n\n` +
+      `⚠️ WARNING: This reveals your private seed phrase!\n\n` +
+      `Your seed phrase is the key to your wallet. Anyone with this phrase can access and steal your funds.\n\n` +
+      `✅ SAFE to share with:\n- Yourself (backup)\n- Hardware wallet (import)\n\n` +
+      `❌ NEVER share with:\n- Anyone online\n- Suspicious links\n- Screenshots\n\n` +
+      `Once you export, keep it safe. We recommend:\n` +
+      `1. Write it down on paper\n` +
+      `2. Store in a safe place\n` +
+      `3. Never store digitally\n\n` +
+      `Do you understand and want to proceed?`
 
     await ctx.reply(warningMessage, { reply_markup: confirmKeyboard })
   } catch (error) {
@@ -54,8 +62,12 @@ Do you understand and want to proceed?`
 }
 
 /**
- * STEP 2: Initiate TOTP verification before revealing seed phrase.
- * If the user has no TOTP secret yet, generate one and show the QR code first.
+ * STEP 2: Ask for TOTP code — never generates or shows a QR here.
+ *
+ * SECURITY: By this point we know the user already has a TOTP secret
+ * (the gate in Step 1 ensures that). We simply ask for the code.
+ * No "Regenerate QR" button is shown — that path is only available
+ * via /totpsetup which requires the current code to authorise.
  */
 export const exportConfirmHandler = async (ctx: Context): Promise<void> => {
   const userId = ctx.from?.id
@@ -64,60 +76,22 @@ export const exportConfirmHandler = async (ctx: Context): Promise<void> => {
   try {
     await ctx.answerCallbackQuery().catch(() => {})
 
-    const wallet = await getSelectedWallet(userId)
-    if (!wallet) {
-      await ctx.reply('❌ No wallet selected.')
-      return
-    }
-
+    // Double-check secret still exists (e.g. wasn't wiped between steps)
     const secret = await getSecret(userId)
-
     if (!secret) {
-      // First time — generate a new TOTP secret and show QR
-      const { otpAuth, backupCodes } = await generateAndSaveSecret(userId)
-
-      try {
-        const png = await QRCode.toBuffer(otpAuth, { type: 'png', margin: 1, width: 300 })
-        const input = new InputFile(png, 'qrcode.png')
-        await ctx.replyWithPhoto(input, {
-          caption:
-            '🔐 Scan this QR code with Google Authenticator (or any TOTP app).\n\n' +
-            'After adding, send the 6-digit code shown in your app to continue.',
-        })
-      } catch (err) {
-        console.error('QR generation failed, sending otpAuth URL fallback', err)
-        await ctx.reply(
-          `Set up your TOTP app using this URL:\n\`${otpAuth}\`\n\nAfter adding, send the 6-digit code shown in your app.`,
-          { parse_mode: 'Markdown' }
-        )
-      }
-
-      if (backupCodes?.length) {
-        await ctx.reply(
-          `📋 One-time backup codes (save these offline). Each can be used once:\n\n${backupCodes.join('\n')}`
-        )
-      }
-
-      // Show options keyboard
-      const keyboard = new InlineKeyboard()
-        .text('🔄 Regenerate QR', 'export:regen')
-        .text('✏️ Enter code', 'export:enter_code')
-      await ctx.reply('Once scanned, tap "Enter code" or just type your 6-digit code.', {
-        reply_markup: keyboard,
-      })
-    } else {
-      // Already has a TOTP secret — show options keyboard
-      const keyboard = new InlineKeyboard()
-        .text('🔄 Regenerate QR', 'export:regen')
-        .text('✏️ Enter code', 'export:enter_code')
       await ctx.reply(
-        '🔐 Please enter your 6-digit Google Authenticator code to continue.\n\nTap "Enter code" or just type the 6-digit code.',
-        { reply_markup: keyboard }
+        '❌ 2FA setup not found. Please run /totpsetup to configure Google Authenticator before exporting.'
       )
+      return
     }
 
     // Mark that we are awaiting a TOTP code for this export (5-minute window)
     await redis.set(redisKeys.exportAwaitTotp(userId), '1', 'EX', 300)
+
+    await ctx.reply(
+      '🔐 Enter the 6-digit code from your Google Authenticator app to continue.\n\n' +
+        '💡 Open your authenticator app and type the code shown for AonkBot.'
+    )
   } catch (err) {
     console.error('Error initiating TOTP for export:', err)
     await ctx.reply('❌ Failed to start two-factor verification. Please try again.')
@@ -125,52 +99,28 @@ export const exportConfirmHandler = async (ctx: Context): Promise<void> => {
 }
 
 /**
- * Regenerate TOTP secret and send a fresh QR + backup codes
+ * SECURITY: Regenerate via export flow is permanently disabled.
+ *
+ * The "export:regen" callback is kept wired in the router so old in-flight
+ * messages don't crash, but it now refuses to do anything and redirects the
+ * user to the safe /totpsetup path (which requires verifying the current
+ * code before overwriting the secret).
  */
 export const exportRegenHandler = async (ctx: Context): Promise<void> => {
-  const userId = ctx.from?.id
-  if (!userId) return
-
   try {
     await ctx.answerCallbackQuery().catch(() => {})
-
-    // Remove old secret and backup codes
-    await redis.del(redisKeys.totpSecret(userId))
-    await redis.del(redisKeys.totpBackupCodes(userId))
-
-    const { otpAuth, backupCodes } = await generateAndSaveSecret(userId)
-
-    try {
-      const png = await QRCode.toBuffer(otpAuth, { type: 'png', margin: 1, width: 300 })
-      const input = new InputFile(png, 'qrcode.png')
-      await ctx.replyWithPhoto(input, {
-        caption:
-          '🔄 New TOTP setup generated. Scan this QR with your authenticator app, then send the 6-digit code.',
-      })
-    } catch (err) {
-      console.error('QR generation failed, sending otpAuth URL fallback', err)
-      await ctx.reply(
-        `Set up your TOTP app using this URL:\n\`${otpAuth}\`\n\nAfter adding, send the 6-digit code shown in your app.`,
-        { parse_mode: 'Markdown' }
-      )
-    }
-
-    if (backupCodes?.length) {
-      await ctx.reply(
-        `📋 One-time backup codes (save these offline). Each can be used once:\n\n${backupCodes.join('\n')}`
-      )
-    }
-
-    // Reset the awaiting flag (5-minute window)
-    await redis.set(redisKeys.exportAwaitTotp(userId), '1', 'EX', 300)
+    await ctx.reply(
+      '🔒 For security reasons, you cannot regenerate your authenticator from the export screen.\n\n' +
+        'To set up a new authenticator (e.g. if you got a new phone), use:\n' +
+        '/totpsetup — you will need to verify your current code first.'
+    )
   } catch (err) {
-    console.error('Error regenerating TOTP', err)
-    await ctx.reply('❌ Failed to regenerate TOTP. Please try again.')
+    console.error('Error in disabled regen handler', err)
   }
 }
 
 /**
- * Prompt user to type their TOTP code (used by the 'Enter code' button)
+ * Prompt user to type their TOTP code (kept for backward-compat with old keyboards)
  */
 export const exportEnterCodeHandler = async (ctx: Context): Promise<void> => {
   try {
