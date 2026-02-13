@@ -1,76 +1,190 @@
 import { Context } from 'grammy'
+import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { getSelectedWallet } from '../blockchain/wallet.service.js'
-import { getSolBalance, getTokenBalances } from '../blockchain/balance.service.js'
-import { walletMenu } from '../ui/walletMenu.js'
 
-export async function walletHandler(ctx: Context): Promise<void> {
+import { solana as rpcConnection } from '../blockchain/solana.client.js'
+import { buildWalletKeyboard } from '../ui/walletMenu.js'
+
+/* ─────────────────────────────────────────────
+   Helpers
+───────────────────────────────────────────── */
+
+/**
+ * Fetch the SOL balance (in SOL, 4 decimal places) for a public key string.
+ * Returns 0 on any RPC error so the UI is never broken.
+ */
+async function fetchSolBalance(publicKey: string): Promise<string> {
+  try {
+    const pubkey = new PublicKey(publicKey)
+    const lamports = await rpcConnection.getBalance(pubkey, 'confirmed')
+    return (lamports / LAMPORTS_PER_SOL).toFixed(4)
+  } catch (err) {
+    console.error('[wallet] Failed to fetch balance:', err)
+    return '0.0000'
+  }
+}
+
+/**
+ * Shorten a public key for display: first 4 chars ... last 4 chars
+ * e.g. "4F3E...NuY"
+ */
+function shortenAddress(address: string): string {
+  if (address.length <= 12) return address
+  return `${address.slice(0, 4)}...${address.slice(-4)}`
+}
+
+/**
+ * Build the wallet message text.
+ * Centralised here so both the initial send and the in-place refresh
+ * produce identical formatting.
+ */
+function buildWalletMessage(params: {
+  walletName: string
+  publicKey: string
+  solBalance: string
+  refreshedAt?: Date
+}): string {
+  const { walletName, publicKey, solBalance, refreshedAt } = params
+
+  const shortAddress = shortenAddress(publicKey)
+  const solscanUrl = `https://solscan.io/account/${publicKey}`
+
+  // Timestamp line shown only on refreshes (matches BonkBot behaviour)
+  const timestampLine = refreshedAt
+    ? `\n🕐 Last refreshed: ${refreshedAt.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      })}`
+    : ''
+
+  return (
+    `💼 *Your Wallet*\n\n` +
+    `*Wallet ${walletName}*\n\n` +
+    `📍 Address: \`${shortAddress}\`\n` +
+    `⭐ SOL Balance: *${solBalance} SOL*\n\n` +
+    `Use /send to swap tokens\n` +
+    `Use /txs to view transaction history` +
+    timestampLine
+  )
+}
+
+/* ─────────────────────────────────────────────
+   /wallet command handler
+   Sends the wallet card as a new message.
+───────────────────────────────────────────── */
+
+export const walletHandler = async (ctx: Context): Promise<void> => {
   const userId = ctx.from?.id
   if (!userId) return
 
-  let loadingMsg: any | undefined
   try {
-    // Show loading state and keep reference so we can remove it later
-    loadingMsg = await ctx.reply('💼 *Loading wallet...*', { parse_mode: 'Markdown' })
-
     const wallet = await getSelectedWallet(userId)
     if (!wallet) {
-      // remove loading indicator before returning
-      try { if (loadingMsg?.chat && loadingMsg?.message_id) await ctx.api.deleteMessage(loadingMsg.chat.id, loadingMsg.message_id) } catch {}
-      await ctx.reply('❌ No wallet selected. Use /wallet to select one.').catch(() => {})
+      await ctx.reply(
+        '❌ No wallet found.\n\nUse /start to create one.',
+      )
       return
     }
 
-    const solBalance = await getSolBalance(wallet.publicKey)
+    const solBalance = await fetchSolBalance(wallet.publicKey)
 
-    // Try to fetch token balances
-    let tokenBalancesText = ''
-    try {
-      const tokenBalances = await getTokenBalances(wallet.publicKey)
+    const text = buildWalletMessage({
+      walletName: wallet.name ?? wallet.publicKey.slice(0, 8),
+      publicKey: wallet.publicKey,
+      solBalance,
+    })
 
-      if (tokenBalances.length > 0) {
-        tokenBalancesText = '\n\n*Token Balances:*\n'
-        tokenBalancesText += tokenBalances
-          .slice(0, 5) // Show top 5 tokens
-          .map(t => `• ${t.symbol}: ${t.balance.toFixed(6)}`)
-          .join('\n')
+    await ctx.reply(text, {
+      parse_mode: 'Markdown',
+      reply_markup: buildWalletKeyboard(),
+    })
+  } catch (err) {
+    console.error('[wallet] walletHandler error:', err)
+    await ctx.reply('❌ Failed to load wallet. Please try again.')
+  }
+}
 
-        if (tokenBalances.length > 5) {
-          tokenBalancesText += `\n... and ${tokenBalances.length - 5} more`
-        }
-      }
-    } catch (err) {
-      console.log('[Token Balances Fetch Error]', err)
-      // Continue without token balances
+/* ─────────────────────────────────────────────
+   wallet:refresh callback handler
+   BonkBot style: edits the EXISTING message
+   in-place — no new message is posted.
+   Shows a brief "⏳ Refreshing..." indicator,
+   then updates with the latest balance.
+───────────────────────────────────────────── */
+
+export const walletRefreshHandler = async (ctx: Context): Promise<void> => {
+  const userId = ctx.from?.id
+  if (!userId) return
+
+  try {
+    // 1. Acknowledge immediately so Telegram stops the loading spinner
+    await ctx.answerCallbackQuery({ text: '🔄 Refreshing...' }).catch(() => {})
+
+    const wallet = await getSelectedWallet(userId)
+    if (!wallet) {
+      await ctx.answerCallbackQuery({ text: '❌ No wallet found', show_alert: true }).catch(() => {})
+      return
     }
 
-    const shortAddress = wallet.publicKey.slice(0, 8) + '...' + wallet.publicKey.slice(-8)
-    const displayName = (wallet.name && !wallet.name.startsWith('/')) ? wallet.name : `Wallet ${shortAddress}`
+    // 2. Fetch fresh balance from RPC
+    const solBalance = await fetchSolBalance(wallet.publicKey)
+    const refreshedAt = new Date()
 
-    await ctx.reply(
-      `💼 *Your Wallet*\n\n` +
-      `*${displayName}*\n\n` +
-      `📍 Address: \`${shortAddress}\`\n\n` +
-      `⭐ SOL Balance: *${solBalance.toFixed(4)} SOL*` +
-      tokenBalancesText +
-      `\n\n` +
-      `Use /send to swap tokens\n` +
-      `Use /txs to view transaction history`,
-      // { parse_mode: 'Markdown' }
-       { reply_markup: walletMenu }
-    )
-    // remove loading indicator now that final message is sent
-    try { if (loadingMsg?.chat && loadingMsg?.message_id) await ctx.api.deleteMessage(loadingMsg.chat.id, loadingMsg.message_id) } catch {}
-  } catch (err: any) {
-    console.error('[Wallet Handler Error]', err)
-    // remove loading indicator on error if present
-    try { if (loadingMsg?.chat && loadingMsg?.message_id) await ctx.api.deleteMessage(loadingMsg.chat.id, loadingMsg.message_id) } catch {}
+    const newText = buildWalletMessage({
+      walletName: wallet.name ?? wallet.publicKey.slice(0, 8),
+      publicKey: wallet.publicKey,
+      solBalance,
+      refreshedAt,
+    })
 
-    await ctx.reply(
-      `⚠️ Unable to fetch wallet details\n\n` +
-      `Error: ${err.message}\n` +
-      `Please try again shortly.`,
-      // { parse_mode: 'Markdown' }
-       { reply_markup: walletMenu }
-    )
+    // 3. Edit the existing message in-place (BonkBot style)
+    //    editMessageText throws if the content hasn't changed — catch silently.
+    await ctx.editMessageText(newText, {
+      parse_mode: 'Markdown',
+      reply_markup: buildWalletKeyboard(),
+    }).catch((err: Error) => {
+      // Telegram error 400: "message is not modified" — ignore it
+      if (!err.message?.includes('message is not modified')) {
+        throw err
+      }
+    })
+  } catch (err) {
+    console.error('[wallet] walletRefreshHandler error:', err)
+    await ctx.answerCallbackQuery({
+      text: '❌ Refresh failed. Please try again.',
+      show_alert: true,
+    }).catch(() => {})
+  }
+}
+
+/* ─────────────────────────────────────────────
+   wallet:solscan callback handler
+   Opens Solscan URL via an alert (Telegram
+   doesn't support opening URLs from callbacks
+   without a button, but we can show the URL).
+───────────────────────────────────────────── */
+
+export const walletSolscanHandler = async (ctx: Context): Promise<void> => {
+  const userId = ctx.from?.id
+  if (!userId) return
+
+  try {
+    const wallet = await getSelectedWallet(userId)
+    if (!wallet) {
+      await ctx.answerCallbackQuery({ text: '❌ No wallet found', show_alert: true }).catch(() => {})
+      return
+    }
+
+    // Open Solscan directly using a URL button is the correct approach
+    // (handled in the keyboard via url() — see note below).
+    // This fallback fires if somehow the callback route is hit instead.
+    await ctx.answerCallbackQuery({
+      text: `https://solscan.io/account/${wallet.publicKey}`,
+      show_alert: true,
+    }).catch(() => {})
+  } catch (err) {
+    console.error('[wallet] walletSolscanHandler error:', err)
+    await ctx.answerCallbackQuery({ text: '❌ Error', show_alert: true }).catch(() => {})
   }
 }

@@ -1,4 +1,4 @@
-import { Context, InlineKeyboard } from 'grammy'
+import { Context } from 'grammy'
 import { routes } from './router.js'
 import { unknownHandler } from '../handlers/unknown.handler.js'
 import { acquireLock } from './locks.js'
@@ -24,6 +24,7 @@ import {
   regenerateTOTPHandler,
   confirmRegenerateTOTP,
 } from '../handlers/onboarding.handler.js'
+import { walletRefreshHandler, walletSolscanHandler } from '../handlers/wallet.handler.js'
 
 export async function routeCallback(ctx: Context): Promise<void> {
   const data = ctx.callbackQuery?.data
@@ -32,13 +33,15 @@ export async function routeCallback(ctx: Context): Promise<void> {
   const userId = ctx.from?.id
   if (!userId) return
 
-  /* ────────────────────────────────────────
-     Always acknowledge the button tap first.
-     Individual handlers that need to show an
-     alert call answerCallbackQuery themselves
-     with a text param; for all others we
-     silently ack here.
-  ──────────────────────────────────────── */
+  /* ────────────────────────────────────────────────────────────
+     wallet:refresh and wallet:solscan handle their own
+     answerCallbackQuery calls internally (they need custom text).
+     All other routes get a silent ack here.
+  ──────────────────────────────────────────────────────────── */
+  if (data === 'wallet:refresh') return walletRefreshHandler(ctx)
+  if (data === 'wallet:solscan') return walletSolscanHandler(ctx)
+
+  /* Silently ack all other callbacks */
   await ctx.answerCallbackQuery().catch(() => {})
 
   /* ─── Close ─── */
@@ -47,7 +50,7 @@ export async function routeCallback(ctx: Context): Promise<void> {
     return
   }
 
-  /* ─── Wallet ─── */
+  /* ─── Wallet select / create ─── */
   if (data.startsWith('wallet_select:')) return walletSelectHandler(ctx)
   if (data === 'wallet_create') return createWalletHandler(ctx)
 
