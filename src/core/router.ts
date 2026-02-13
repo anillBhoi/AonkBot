@@ -20,6 +20,8 @@ import { exportSeedPhraseHandler } from '../handlers/exportSeedPhrase.handler.js
 import { exportSeedPhraseSecureHandler } from '../handlers/exportSeedPhraseSecure.handler.js'
 import { regenerateTOTPHandler } from '../handlers/onboarding.handler.js'
 import { buyToken } from '../handlers/buyToken.handler.js'
+import { extractSolanaMint } from '../utils/tokenDetector.js'
+import { tokenPreviewHandler } from '../handlers/tokenPreview.handler.js'
 
 /* ===== ROUTES ===== */
 
@@ -75,6 +77,12 @@ export const routes: Record<string, (ctx: Context) => Promise<void>> = {
 export async function routeCommand(ctx: Context): Promise<void> {
   const message = ctx.message?.text
   if (!message) return
+
+    const mint = extractSolanaMint(message);
+
+  if (mint) {
+    return tokenPreviewHandler(ctx, mint);
+  }
 
   const commandMatch = message.match(/^\/([a-z]+)/)
   const command = commandMatch ? commandMatch[1].toLowerCase() : message.split(' ')[0].toLowerCase()
