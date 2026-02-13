@@ -2,8 +2,8 @@
 import { InlineKeyboard } from 'grammy'
 
 export const mainMenuKeyboard = new InlineKeyboard()
-  .text('Buy', 'cmd:buysol')
-  .text('Fund', 'cmd:fund')
+  .text('Buy', 'cmd:buytoken')
+  .text('Fund', 'cmd:buysol')
   .row()
   .text('✅ W1 (Master)', 'cmd:selectedwallet')
   .text('Change Wallet', 'cmd:changewallet')

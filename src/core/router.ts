@@ -19,6 +19,7 @@ import { resetAllWalletsHandler } from '../handlers/resetAllWallets.handler.js'
 import { exportSeedPhraseHandler } from '../handlers/exportSeedPhrase.handler.js'
 import { exportSeedPhraseSecureHandler } from '../handlers/exportSeedPhraseSecure.handler.js'
 import { regenerateTOTPHandler } from '../handlers/onboarding.handler.js'
+import { buyToken } from '../handlers/buyToken.handler.js'
 
 /* ===== ROUTES ===== */
 
@@ -32,6 +33,7 @@ export const routes: Record<string, (ctx: Context) => Promise<void>> = {
   confirm: confirmHandler,
   cancel: cancelHandler,
   buysol: buySolHandler,
+  buytoken: buyToken,
   deposit: deposit,
   txs: txsHandler,
   withdraw: withdrawMenuHandler,

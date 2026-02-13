@@ -8,3 +8,9 @@ export function buildMoonpayUrl(walletAddress: string): string {
 
   return `https://buy.moonpay.com/?${params.toString()}`;
 }
+
+// export function pumpFun():string{
+//   const params = new URLSearchParams({
+//    return `https://pump.fun`;
+//   });
+// }
