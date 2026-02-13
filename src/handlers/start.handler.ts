@@ -2,6 +2,7 @@ import { Context } from 'grammy'
 import { getOrCreateWallet } from "../blockchain/wallet.service.js"
 import { config } from '../utils/config.js'
 import { mainMenuKeyboard } from '../ui/mainMenu.keyboard.js'
+import { checkAndInitiateOnboarding, showOnboardingWelcome } from './onboarding.handler.js'
 
 export async function startHandler(ctx: Context) {
   const userId = ctx.from?.id
@@ -9,10 +10,19 @@ export async function startHandler(ctx: Context) {
 
   const wallet = await getOrCreateWallet(userId)
 
+  // Check if user needs to complete onboarding (2FA setup)
+  const needsOnboarding = await checkAndInitiateOnboarding(ctx)
+
+  if (needsOnboarding) {
+    // User will see onboarding flow
+    return
+  }
+
+  // User has completed onboarding, show main menu
   const isDevnet = (config.solanaCluster === 'devnet')
 
-  const welcome = `👋 *Welcome to AonkBot*\n\n` +
-    `Your Solana wallet is ready:\n` +
+  const welcome = `👋 *Welcome back to AonkBot*\n\n` +
+    `Your Solana wallet:\n` +
     `\`${wallet.publicKey}\`\n\n` +
     `*Quick Start - Recommended next steps:*\n` +
     `1. /wallet - Check your SOL balance and holdings\n` +
@@ -25,8 +35,7 @@ export async function startHandler(ctx: Context) {
     `7. /help - Show full command reference\n\n` +
     `*Notes:* Quotes expire in 60s. Default slippage = 50 bps (0.5%). Use /help for examples.`
 
-  //await ctx.reply(welcome, { parse_mode: 'Markdown' })
- await ctx.reply(
+  await ctx.reply(
     'Welcome to AonkBot 🚀\n\nSelect an action below:',
     { reply_markup: mainMenuKeyboard }
   )

@@ -1,6 +1,7 @@
 import { Bot } from 'grammy'
 import { config } from '../utils/config.js'
 import { resetAllWalletsHandler } from '../handlers/resetAllWallets.handler.js'
+import { totpMessageHandler } from '../handlers/totp.handler.js'
 
  export const bot = new Bot(config.botToken)
 
@@ -8,9 +9,7 @@ import { resetAllWalletsHandler } from '../handlers/resetAllWallets.handler.js'
 bot.command('reset_wallets', resetAllWalletsHandler)
 
 export async function startBot() {
-  bot.command('start', ctx =>
-    ctx.reply('🤖 Bot is live')
-  )
-  bot.on("message", (ctx) => ctx.reply("Welcome to the new Era of trading world !"));
+  bot.command('start', ctx => ctx.reply('🤖 Bot is live'))
+  bot.on('message', (ctx) => totpMessageHandler(ctx))
   await bot.start()
 }

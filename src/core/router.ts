@@ -17,6 +17,8 @@ import { withdrawMenuHandler } from '../handlers/withdrawMenuHandler.js'
 import { manageToken } from '../handlers/manageTokens.handler.js'
 import { resetAllWalletsHandler } from '../handlers/resetAllWallets.handler.js'
 import { exportSeedPhraseHandler } from '../handlers/exportSeedPhrase.handler.js'
+import { exportSeedPhraseSecureHandler } from '../handlers/exportSeedPhraseSecure.handler.js'
+import { regenerateTOTPHandler } from '../handlers/onboarding.handler.js'
 
 /* ===== ROUTES ===== */
 
@@ -63,6 +65,8 @@ export const routes: Record<string, (ctx: Context) => Promise<void>> = {
   resetwallets: resetAllWalletsHandler,
 
   exportphrase: exportSeedPhraseHandler,
+  exportphrasesecure: exportSeedPhraseSecureHandler,
+  totpsetup: regenerateTOTPHandler,
 }
 
 /* ===== COMMAND ROUTER ===== */
