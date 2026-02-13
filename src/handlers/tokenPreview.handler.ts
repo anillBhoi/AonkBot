@@ -1,13 +1,13 @@
-import { Context, InlineKeyboard } from "grammy";
-import { getTokenData } from "../services/token.service.js";
+import { Context, InlineKeyboard } from "grammy"
+import { getTokenData } from "../services/token.service.js"
 
 export async function tokenPreviewHandler(ctx: Context, mint: string) {
 
-  const pair = await getTokenData(mint);
+  const pair = await getTokenData(mint)
 
   if (!pair) {
-    await ctx.reply("❌ Token not found.");
-    return;
+    await ctx.reply("❌ Token not found.")
+    return
   }
 
   const keyboard = new InlineKeyboard()
@@ -16,11 +16,10 @@ export async function tokenPreviewHandler(ctx: Context, mint: string) {
     .row()
     .text("Buy X SOL", `buy:x:${mint}`)
     .row()
-    .text("Cancel", "close");
+    .text("Cancel", "close")
 
   await ctx.reply(
-    `
-*${pair.baseToken.name} | ${pair.baseToken.symbol}*
+`*${pair.baseToken.name} | ${pair.baseToken.symbol}*
 
 Price: $${pair.priceUsd}
 Liquidity: $${pair.liquidity?.usd}
@@ -32,5 +31,5 @@ FDV: $${pair.fdv}
       parse_mode: "Markdown",
       reply_markup: keyboard
     }
-  );
+  )
 }

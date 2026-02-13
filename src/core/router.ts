@@ -22,6 +22,7 @@ import { regenerateTOTPHandler } from '../handlers/onboarding.handler.js'
 import { buyToken } from '../handlers/buyToken.handler.js'
 import { extractSolanaMint } from '../utils/tokenDetector.js'
 import { tokenPreviewHandler } from '../handlers/tokenPreview.handler.js'
+import { tokenInfoHandler } from '../handlers/tokenInfo.handler.js'
 
 /* ===== ROUTES ===== */
 
@@ -99,4 +100,18 @@ export async function routeCommand(ctx: Context): Promise<void> {
   } else {
     await unknownHandler(ctx)
   }
+
+}
+
+const tokenRegex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
+
+export async function interceptTokenInput(ctx: Context) {
+
+  const text = ctx.message?.text
+  if (!text) return false
+
+  if (!tokenRegex.test(text)) return false
+
+  await tokenInfoHandler(ctx, text)
+  return true
 }

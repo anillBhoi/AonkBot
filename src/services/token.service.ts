@@ -1,10 +1,24 @@
-import axios from "axios";
+export async function fetchTokenInfo(token: string) {
 
-export async function getTokenData(mint: string) {
+  const res = await fetch(
+    `https://api.dexscreener.com/latest/dex/tokens/${token}`
+  )
 
-  const res = await axios.get(
-    `https://api.dexscreener.com/latest/dex/tokens/${mint}`
-  );
+  const data = await res.json()
 
-  return res.data?.pairs?.[0] ?? null;
+  const pair = data.pairs?.[0]
+  if (!pair) return null
+
+  return {
+    name: pair.baseToken.name,
+    symbol: pair.baseToken.symbol,
+    price: pair.priceUsd,
+    mcap: pair.marketCap,
+    raw: pair
+  }
+}
+
+export async function getTokenData(token: string) {
+  const info = await fetchTokenInfo(token)
+  return info?.raw ?? null
 }
