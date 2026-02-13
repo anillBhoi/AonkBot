@@ -1,9 +1,8 @@
 // ui/mainMenu.keyboard.ts
 import { InlineKeyboard } from 'grammy'
 
-
 export const mainMenuKeyboard = new InlineKeyboard()
-  .text('Buy', 'cmd:buy')
+  .text('Buy', 'cmd:buysol')
   .text('Fund', 'cmd:fund')
   .row()
   .text('✅ W1 (Master)', 'cmd:selectedwallet')
