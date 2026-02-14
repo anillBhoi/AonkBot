@@ -1,17 +1,11 @@
 import { Context, InlineKeyboard } from "grammy"
-// import { fetchTokenInfo } from "../services/token.service.js"
-import { getTradeMessage } from "../core/state/tradeMessage.state.js"
 import { formatSmallPrice } from "../utils/tokenDetector.js"
 import { fetchTokenInfo } from "../services/token.service.js"
 
-
 export async function tokenInfoHandler(ctx: Context, token: string) {
 
-  const userId = ctx.from!.id
-  const messageId = getTradeMessage(userId)
-  if (!messageId) return
-
   const info = await fetchTokenInfo(token)
+
   if (!info) {
     await ctx.reply("❌ Token not found.")
     return
@@ -42,9 +36,8 @@ export async function tokenInfoHandler(ctx: Context, token: string) {
 [Explorer](https://solscan.io/account/${token}) | [Chart](https://dexscreener.com/solana/${token}) | [Scan](https://t.me/RickBurpBot?start=${token})
 
 Price: $${formatSmallPrice(Number(info.price))}
-5m: ${info.priceChange5m}%, 1h: ${info.priceChange1h}%, 6h: ${info.priceChange6h}%, 24h: ${info.priceChange24h}%
-Market Cap: $${info.mcap}
-
+5m: ${info.priceChange5m ?? "0.00"}%, 1h: ${info.priceChange1h ?? "0.00"}%, 6h: ${info.priceChange6h ?? "0.00"}%, 24h: ${info.priceChange24h ?? "0.00"}%
+Market Cap: $${info.mcap ?? "0"}
 
 Wallet Balance: 0.0000 SOL
 
@@ -52,14 +45,9 @@ Wallet Balance: 0.0000 SOL
 To buy press one of the buttons below.
 `
 
-  await ctx.api.editMessageText(
-    ctx.chat!.id,
-    messageId,
-    text,
-    {
-      parse_mode: "Markdown",
-      reply_markup: keyboard,
-      link_preview_options: { is_disabled: false }
-    }
-  )
+  await ctx.reply(text, {
+    parse_mode: "Markdown",
+    reply_markup: keyboard,
+    reply_to_message_id: ctx.message?.message_id
+  })
 }

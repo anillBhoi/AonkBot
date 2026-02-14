@@ -28,6 +28,7 @@ import { walletRefreshHandler } from '../handlers/wallet.handler.js'
 import { redis } from '../config/redis.js'
 import { clearWithdrawState } from './state/withdraw.state.js'
 import { redisKeys } from '../utils/redisKeys.js'
+import { executeSwap } from '../services/swap.service.js'
 
 /**
  * ✅ FIX: Clear ALL conversational states to prevent input conflicts
@@ -133,4 +134,28 @@ export async function routeCallback(ctx: Context): Promise<void> {
 
   const handler = routes[command] ?? unknownHandler
   await handler(ctx)
+
+if (data.startsWith("trade:buy:")) {
+  const [, , token, amountStr] = data.split(":")
+  const amount = Number(amountStr)
+
+  try {
+    await ctx.editMessageText("⏳ Executing swap...")
+
+    const txid = await executeSwap({
+      userId: ctx.from!.id,
+      inputMint: "So11111111111111111111111111111111111111112", // SOL
+      outputMint: token,
+      amountSol: amount
+    })
+
+    await ctx.editMessageText(
+      `✅ Swap Successful!\n\nTX:\nhttps://solscan.io/tx/${txid}`
+    )
+
+  } catch (err: any) {
+    await ctx.reply(`❌ Swap Failed: ${err.message}`)
+  }
+}
+
 }
