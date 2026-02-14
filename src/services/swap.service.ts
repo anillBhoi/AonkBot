@@ -13,66 +13,70 @@ const connection = new Connection(
   "confirmed"
 )
 export async function executeSwap({
-    userId, 
-    inputMint, 
-    outputMint,
-    amountSol
+  userId,
+  inputMint,
+  outputMint,
+  amountSol
 }: {
-    userId: number
-    inputMint:string
-    outputMint:string
-    amountSol: number
+  userId: number
+  inputMint: string
+  outputMint: string
+  amountSol: number
 }) {
-    const wallet = await loadWalletSigner(userId)
 
-    const amountLamports = amountSol * 1_000_000_000
+  const wallet = await loadWalletSigner(userId)
+  const amountLamports = Math.floor(amountSol * 1_000_000_000)
 
-    // Get qoute 
-    const qouteRes = await fetch(
-          `${JUP_QUOTE}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountLamports}&slippageBps=100`
-    )
+  // QUOTE
+  const quoteRes = await fetch(
+    `${JUP_QUOTE}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountLamports}&slippageBps=100`
+  )
 
-    const quoteData = await qouteRes.json()
+  const quoteData = await quoteRes.json()
 
-    if(!quoteData?.data?.[0]) {
-        throw new Error("No swap route found ")
-    }
+  if (!quoteData?.data?.[0]) {
+    throw new Error("No swap route found")
+  }
 
-    const route = quoteData.data[0]
+  const route = quoteData.data[0]
 
-    // get swap transaction
-    const swapRes = await fetch(JUP_SWAP, {
-        method: "POST", 
-        headers :{ "Content-Type":"application/json"},
-        body:JSON.stringify({
-            qouteResponse: route, 
-            userPublicKey: wallet.publicKey.toString(), 
-            wrapAndUnwrapSol: true
-        })
+  // SWAP
+  const swapRes = await fetch(JUP_SWAP, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      quoteResponse: route, // ✅ FIXED
+      userPublicKey: wallet.publicKey.toString(),
+      wrapAndUnwrapSol: true
     })
+  })
 
-    const swapData = await swapRes.json()
+  const swapData = await swapRes.json()
 
-    if(!swapData.swapTransaction){
-        throw new Error("Failed to build swap transaction")
-    }
+  if (!swapData.swapTransaction) {
+    throw new Error("Failed to build swap transaction")
+  }
 
-    // Deserialize transaction
-    const tx = VersionedTransaction.deserialize(
-        Buffer.from(swapData.swapTransaction, "base64")
-    )
+  const tx = VersionedTransaction.deserialize(
+    Buffer.from(swapData.swapTransaction, "base64")
+  )
 
-    tx.sign([wallet])
+  tx.sign([wallet])
 
-    // send transaction
-    const txid = await connection.sendTransaction(tx)
+   const { blockhash, lastValidBlockHeight } =
+  await connection.getLatestBlockhash()
 
-    await connection.confirmTransaction(txid, "confirmed")
+tx.message.recentBlockhash = blockhash
 
-    return txid
+const txid = await connection.sendTransaction(tx)
+
+await connection.confirmTransaction(
+  { signature: txid, blockhash, lastValidBlockHeight },
+  "confirmed"
+)
 
 
+  await connection.confirmTransaction(txid, "confirmed")
 
-
-
+  return txid
 }
