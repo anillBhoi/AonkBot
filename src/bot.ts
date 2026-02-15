@@ -23,6 +23,8 @@ import { clearBuyXState, getBuyXState } from "./core/state/buyX.state.js"
 import { executeSwap } from "./services/swap.service.js"
 import { saveOrder } from "./services/orders.store.js"
 import { clearCreateDraft, getCreateDraft, setCreateDraft } from "./core/state/orderCreate.state.js"
+import { startDcaWorker } from "./workers/dca.worker.js"
+import { startLimitWorker } from "./workers/limit.worker.js"
 
 export const bot = new Bot(config.botToken)
 
@@ -286,7 +288,8 @@ if (draft) {
   /* ═══════════════════════════════════════════
      START BOT
   ═══════════════════════════════════════════ */
-
+startDcaWorker()
+startLimitWorker()
   await bot.start()
   console.log("[Bot] 🚀 Running")
 }
