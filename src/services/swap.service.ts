@@ -1,82 +1,62 @@
-import {
-  Connection,
-  VersionedTransaction
-} from "@solana/web3.js"
+import { Connection, VersionedTransaction } from "@solana/web3.js"
 import { loadWalletSigner } from "../blockchain/wallet.service.js"
-
 
 const JUP_QUOTE = "https://quote-api.jup.ag/v6/quote"
 const JUP_SWAP = "https://quote-api.jup.ag/v6/swap"
 
-const connection = new Connection(
-  "https://api.mainnet-beta.solana.com",
-  "confirmed"
-)
+const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed")
+
 export async function executeSwap({
   userId,
   inputMint,
   outputMint,
-  amountSol
+  amountSol,
 }: {
   userId: number
   inputMint: string
   outputMint: string
   amountSol: number
 }) {
-
   const wallet = await loadWalletSigner(userId)
   const amountLamports = Math.floor(amountSol * 1_000_000_000)
 
-  // QUOTE
+  // 1) QUOTE
   const quoteRes = await fetch(
     `${JUP_QUOTE}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountLamports}&slippageBps=100`
   )
-
   const quoteData = await quoteRes.json()
 
-  if (!quoteData?.data?.[0]) {
-    throw new Error("No swap route found")
-  }
+  const route = quoteData?.data?.[0]
+  if (!route) throw new Error("No swap route found")
 
-  const route = quoteData.data[0]
-
-  // SWAP
+  // 2) SWAP TX
   const swapRes = await fetch(JUP_SWAP, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      quoteResponse: route, // ✅ FIXED
+      quoteResponse: route,
       userPublicKey: wallet.publicKey.toString(),
-      wrapAndUnwrapSol: true
-    })
+      wrapAndUnwrapSol: true,
+    }),
   })
 
   const swapData = await swapRes.json()
-
-  if (!swapData.swapTransaction) {
-    throw new Error("Failed to build swap transaction")
+  if (!swapData?.swapTransaction) {
+    throw new Error(`Failed to build swap transaction: ${swapData?.error ?? "unknown"}`)
   }
 
-  const tx = VersionedTransaction.deserialize(
-    Buffer.from(swapData.swapTransaction, "base64")
-  )
-
+  // 3) Deserialize + sign
+  const tx = VersionedTransaction.deserialize(Buffer.from(swapData.swapTransaction, "base64"))
   tx.sign([wallet])
 
-   const { blockhash, lastValidBlockHeight } =
-  await connection.getLatestBlockhash()
+  // 4) Send + confirm (single confirm, correct form)
+  const latest = await connection.getLatestBlockhash("confirmed")
+  const txid = await connection.sendTransaction(tx, { maxRetries: 3 })
 
-tx.message.recentBlockhash = blockhash
-
-const txid = await connection.sendTransaction(tx)
-
-await connection.confirmTransaction(
-  { signature: txid, blockhash, lastValidBlockHeight },
-  "confirmed"
-)
-
-
-  await connection.confirmTransaction(txid, "confirmed")
+  await connection.confirmTransaction(
+    { signature: txid, blockhash: latest.blockhash, lastValidBlockHeight: latest.lastValidBlockHeight },
+    "confirmed"
+  )
 
   return txid
 }

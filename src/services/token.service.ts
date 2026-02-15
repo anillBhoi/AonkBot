@@ -1,26 +1,34 @@
 export async function fetchTokenInfo(token: string) {
-  const res = await fetch(
-    `https://api.dexscreener.com/latest/dex/tokens/${token}`
-  );
+  const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${token}`)
+  const data = await res.json()
 
-  const data = await res.json();
-  const pair = data.pairs?.[0];
-  if (!pair) return null;
+  const pairs = data.pairs ?? []
+  if (!pairs.length) return null
+
+  // Prefer SOL pairs with the highest liquidity
+  const best = pairs
+    .filter((p: any) => p?.chainId === "solana")
+    .sort((a: any, b: any) => (b?.liquidity?.usd ?? 0) - (a?.liquidity?.usd ?? 0))[0]
+
+  if (!best) return null
 
   return {
-    name: pair.baseToken.name,
-    symbol: pair.baseToken.symbol,
-    price: pair.priceUsd,
-    mcap: pair.marketCap,
-
-    priceChange5m: pair.priceChange?.m5 ?? null,
-    priceChange1h: pair.priceChange?.h1 ?? null,
-    priceChange6h: pair.priceChange?.h6 ?? null,
-    priceChange24h: pair.priceChange?.h24 ?? null,
-
-    raw: pair
-  };
+    name: best.baseToken?.name,
+    symbol: best.baseToken?.symbol,
+    price: best.priceUsd,
+    mcap: best.marketCap ?? best.fdv ?? null,
+    liquidityUsd: best.liquidity?.usd ?? null,
+    priceChange5m: best.priceChange?.m5 ?? null,
+    priceChange1h: best.priceChange?.h1 ?? null,
+    priceChange6h: best.priceChange?.h6 ?? null,
+    priceChange24h: best.priceChange?.h24 ?? null,
+    url: best.url,
+    dexId: best.dexId,
+    pairAddress: best.pairAddress,
+    raw: best
+  }
 }
+
 
 
 export async function getTokenData(token: string) {
