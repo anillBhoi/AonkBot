@@ -1,11 +1,12 @@
 import { redis } from "../config/redis.js"
 import { getActiveOrderIds, getOrderById, saveOrder } from "../services/orders.store.js"
 import { executeSwap } from "../services/swap.service.js"
+import { executeSell } from "../services/swap.service.js"
 import { fetchTokenInfo } from "../services/token.service.js"
 
 const SOL_MINT = "So11111111111111111111111111111111111111112"
 const MIN_LIQ_USD = 5000
-const REQUIRED_HITS = 2 // debounce: must match 2 checks in a row
+const REQUIRED_HITS = 2
 
 export async function startLimitWorker() {
   setInterval(async () => {
@@ -25,7 +26,6 @@ export async function startLimitWorker() {
         const info = await fetchTokenInfo(order.tokenMint)
         if (!info?.price) continue
 
-        // liquidity floor
         const liq = Number(info.liquidityUsd ?? 0)
         if (!liq || liq < MIN_LIQ_USD) {
           order.lastCheckedAt = now
@@ -47,28 +47,34 @@ export async function startLimitWorker() {
           continue
         }
 
-        // debounce hits
         order.consecutiveHits += 1
         if (order.consecutiveHits < REQUIRED_HITS) {
           await saveOrder(order)
           continue
         }
 
-        // Trigger: execute swap
-        try {
-          await executeSwap({
-            userId: order.userId,
-            inputMint: SOL_MINT,
-            outputMint: order.tokenMint,
-            amountSol: order.amountSol,
-          })
+        const isSellOrder = order.limitSubType === "take_profit" || order.limitSubType === "stop_loss"
 
+        try {
+          if (isSellOrder) {
+            await executeSell({
+              userId: order.userId,
+              tokenMint: order.tokenMint,
+              amountTokenPortion: order.sellAmountPortion ?? 1,
+            })
+          } else {
+            await executeSwap({
+              userId: order.userId,
+              inputMint: SOL_MINT,
+              outputMint: order.tokenMint,
+              amountSol: order.amountSol,
+            })
+          }
           order.active = false
           order.triggeredAt = now
           await saveOrder(order)
         } catch (err) {
           console.error(`[LIMIT Execute Error] ${id}`, err)
-          // Optional: store lastError and keep active
         }
       }
     } catch (e) {

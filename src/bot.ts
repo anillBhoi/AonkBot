@@ -132,7 +132,6 @@ if (draft) {
 
   // Step 1: token mint
   if (!draft.tokenMint) {
-    // very light validation
     if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(text)) {
       await ctx.reply("❌ Invalid mint. Send a valid Solana mint address.")
       return
@@ -140,15 +139,19 @@ if (draft) {
     draft.tokenMint = text
     await setCreateDraft(from.id, draft)
 
-    await ctx.reply(draft.mode === "DCA"
-      ? "✅ Now send DCA amount in SOL (example: 0.2)"
-      : "✅ Now send buy amount in SOL (example: 0.2)"
-    )
+    if (draft.mode === "DCA") {
+      await ctx.reply("✅ Now send DCA amount in SOL (example: 0.2)")
+    } else if (draft.mode === "LIMIT" && (draft.limitSubType === "take_profit" || draft.limitSubType === "stop_loss")) {
+      await ctx.reply("✅ Now send target price in USD (example: 0.00005)")
+    } else {
+      await ctx.reply("✅ Now send buy amount in SOL (example: 0.2)")
+    }
     return
   }
 
-  // Step 2: amount SOL
-  if (!draft.amountSol) {
+  // Step 2: amount SOL (DCA or Limit Buy only)
+  const needAmountSol = draft.mode === "DCA" || (draft.mode === "LIMIT" && draft.limitSubType === "buy")
+  if (needAmountSol && draft.amountSol == null) {
     const amountSol = Number(text)
     if (Number.isNaN(amountSol) || amountSol <= 0) {
       await ctx.reply("❌ Invalid amount. Example: 0.2")
@@ -197,8 +200,8 @@ if (draft) {
     return
   }
 
-  // Step 3b: Limit target price
-  if (draft.mode === "LIMIT" && !draft.targetPriceUsd) {
+  // Step 3b: Limit target price (and create order)
+  if (draft.mode === "LIMIT" && draft.targetPriceUsd == null) {
     const p = Number(text)
     if (Number.isNaN(p) || p <= 0) {
       await ctx.reply("❌ Invalid price. Example: 0.00005")
@@ -206,23 +209,32 @@ if (draft) {
     }
     draft.targetPriceUsd = p
 
+    const subType = draft.limitSubType ?? "buy"
+    const isSellOrder = subType === "take_profit" || subType === "stop_loss"
+    const condition = draft.condition ?? (subType === "take_profit" ? "GTE" : subType === "stop_loss" ? "LTE" : "LTE")
+
     const order = {
       id: `limit_${Date.now()}_${Math.floor(Math.random() * 1e6)}`,
       type: "LIMIT" as const,
       userId: from.id,
       tokenMint: draft.tokenMint!,
-      amountSol: draft.amountSol!,
-      targetPriceUsd: draft.targetPriceUsd!,
-      condition: draft.condition ?? "LTE",
+      amountSol: isSellOrder ? 0 : (draft.amountSol ?? 0),
+      targetPriceUsd: draft.targetPriceUsd,
+      condition,
       active: true,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      limitSubType: subType,
+      sellAmountPortion: draft.sellAmountPortion ?? 1,
     }
 
     await saveOrder(order)
     await clearCreateDraft(from.id)
 
+    const desc = isSellOrder
+      ? `Sell when price ${condition === "GTE" ? "≥" : "≤"} $${draft.targetPriceUsd}`
+      : `${order.amountSol} SOL → token when price ${condition === "LTE" ? "≤" : "≥"} $${draft.targetPriceUsd}`
     await ctx.reply(
-      `✅ Limit order created!\n\n• ${order.amountSol} SOL → \`${order.tokenMint}\`\n• Trigger when price ≤ $${order.targetPriceUsd}\n• ID: \`${order.id}\``,
+      `✅ Limit order created!\n\n• \`${order.tokenMint}\`\n• ${desc}\n• ID: \`${order.id}\``,
       { parse_mode: "Markdown" }
     )
     return

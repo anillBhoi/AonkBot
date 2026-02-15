@@ -1,5 +1,7 @@
 import { redis } from "../../config/redis.js"
 
+import type { LimitSubType } from "../../services/orders.store.js"
+
 type CreateMode = "DCA" | "LIMIT"
 
 export interface CreateDraft {
@@ -9,6 +11,8 @@ export interface CreateDraft {
   intervalMinutes?: number // DCA
   targetPriceUsd?: number  // LIMIT
   condition?: "LTE" | "GTE"
+  limitSubType?: LimitSubType
+  sellAmountPortion?: number
 }
 
 const key = (userId: number) => `order:create:${userId}`

@@ -1,4 +1,4 @@
-import { Context } from 'grammy'
+import { Context, InlineKeyboard } from 'grammy'
 import { routes } from './router.js'
 import { unknownHandler } from '../handlers/unknown.handler.js'
 import { acquireLock } from './locks.js'
@@ -241,8 +241,28 @@ if (data === "dca:create") {
 }
 
 if (data === "limit:create") {
-  await setCreateDraft(userId, { mode: "LIMIT", condition: "LTE" })
-  await ctx.reply("🧩 Send token mint for Limit order.")
+  const kb = new InlineKeyboard()
+    .text("Limit Buy", "limit:create_buy")
+    .text("Take Profit", "limit:create_tp")
+    .text("Stop Loss", "limit:create_sl")
+    .row()
+    .text("Close", "close")
+  await ctx.reply("Choose limit order type:", { reply_markup: kb })
+  return
+}
+if (data === "limit:create_buy") {
+  await setCreateDraft(userId, { mode: "LIMIT", limitSubType: "buy", condition: "LTE" })
+  await ctx.reply("🧩 Send token mint for Limit Buy (buy when price ≤ target).")
+  return
+}
+if (data === "limit:create_tp") {
+  await setCreateDraft(userId, { mode: "LIMIT", limitSubType: "take_profit", condition: "GTE" })
+  await ctx.reply("🧩 Send token mint for Take Profit (sell when price ≥ target).")
+  return
+}
+if (data === "limit:create_sl") {
+  await setCreateDraft(userId, { mode: "LIMIT", limitSubType: "stop_loss", condition: "LTE" })
+  await ctx.reply("🧩 Send token mint for Stop Loss (sell when price ≤ target).")
   return
 }
 

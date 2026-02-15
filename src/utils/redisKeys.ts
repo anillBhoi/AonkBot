@@ -56,4 +56,9 @@ export const redisKeys = {
   // They must supply the current 6-digit code before a new QR is issued.
   totpRegenAwait: (id: number) => `totp:regen:await:${id}`,
   totpRegenAttempts: (id: number) => `totp:regen:attempts:${id}`,
+
+  /* ===== Referrals ===== */
+
+  refInviter: (referredUserId: number) => `ref:inviter:${referredUserId}`,
+  refReferredSet: (inviterId: number) => `ref:referred:${inviterId}`,
 }

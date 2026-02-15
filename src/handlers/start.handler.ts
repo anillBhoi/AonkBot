@@ -3,11 +3,26 @@ import { getOrCreateWallet } from "../blockchain/wallet.service.js";
 import { mainMenuKeyboard } from "../ui/mainMenu.keyboard.js";
 import { checkAndInitiateOnboarding } from "./onboarding.handler.js";
 import { buildMoonpayUrl } from "../utils/moonpay.js";
+import { redis } from "../config/redis.js";
+import { redisKeys } from "../utils/redisKeys.js";
 
 export async function startHandler(ctx: Context) {
   try {
     const userId = ctx.from?.id;
     if (!userId) return;
+
+    // ✅ Record referral if /start ref_<inviterId>
+    const startPayload = ctx.message?.text?.trim().split(/\s+/)[1];
+    if (startPayload?.startsWith("ref_")) {
+      const inviterId = Number(startPayload.slice(4));
+      if (Number.isInteger(inviterId) && inviterId !== userId) {
+        const existing = await redis.get(redisKeys.refInviter(userId));
+        if (!existing) {
+          await redis.set(redisKeys.refInviter(userId), String(inviterId));
+          await redis.sadd(redisKeys.refReferredSet(inviterId), String(userId));
+        }
+      }
+    }
 
     // ✅ Create or fetch wallet
     const wallet = await getOrCreateWallet(userId);

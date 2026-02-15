@@ -1,18 +1,28 @@
 import { Context } from 'grammy'
+import { redis } from '../config/redis.js'
+import { redisKeys } from '../utils/redisKeys.js'
 
-/**
- * Referral program placeholder.
- * TODO: Implement referral tracking, rewards, and /referrals stats.
- */
 export async function referHandler(ctx: Context) {
-  const botUsername = (await ctx.api.getMe()).username
-  const refLink = `https://t.me/${botUsername}?start=ref_${ctx.from?.id ?? 0}`
+  const userId = ctx.from?.id
+  if (!userId) return
 
-  await ctx.reply(
+  const botUsername = (await ctx.api.getMe()).username
+  const refLink = `https://t.me/${botUsername}?start=ref_${userId}`
+
+  const referredCount = await redis.scard(redisKeys.refReferredSet(userId))
+  const inviterId = await redis.get(redisKeys.refInviter(userId))
+
+  let msg =
     '👥 *Refer Friends*\n\n' +
-    'Share your link and earn when friends trade:\n\n' +
-    `🔗 ${refLink}\n\n` +
-    'Referral rewards coming soon. Tap *Wallet* to see your balance.',
-    { parse_mode: 'Markdown' }
-  )
+    'Share your link; when friends join and trade, you can earn rewards.\n\n' +
+    `🔗 \`${refLink}\`\n\n` +
+    `👤 *Referred:* ${referredCount} user${referredCount !== 1 ? 's' : ''}`
+
+  if (inviterId) {
+    msg += `\n\nYou were referred by another user.`
+  }
+
+  msg += '\n\n_Tap Wallet to see your balance._'
+
+  await ctx.reply(msg, { parse_mode: 'Markdown' })
 }

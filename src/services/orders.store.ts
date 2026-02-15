@@ -16,6 +16,8 @@ export interface DcaOrder {
   runs: number
 }
 
+export type LimitSubType = "buy" | "take_profit" | "stop_loss"
+
 export interface LimitOrder {
   id: string
   type: "LIMIT"
@@ -24,11 +26,15 @@ export interface LimitOrder {
   tokenMint: string
   amountSol: number
   targetPriceUsd: number
-  condition: "LTE" | "GTE" // Buy when price <= target (LTE) is typical
+  condition: "LTE" | "GTE"
   active: boolean
   createdAt: number
   lastCheckedAt?: number
   triggeredAt?: number
+  /** buy = limit buy (SOL→token); take_profit = sell when price ≥ target; stop_loss = sell when price ≤ target */
+  limitSubType?: LimitSubType
+  /** For take_profit/stop_loss: fraction of token balance to sell (0–1). Default 1 */
+  sellAmountPortion?: number
 }
 
 const keyUserOrders = (userId: number) => `orders:${userId}` // hash: orderId -> json
