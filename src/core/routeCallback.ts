@@ -245,6 +245,7 @@ if (data === "limit:create") {
     .text("Limit Buy", "limit:create_buy")
     .text("Take Profit", "limit:create_tp")
     .text("Stop Loss", "limit:create_sl")
+    .text("Trailing Stop", "limit:create_trailing")
     .row()
     .text("Close", "close")
   await ctx.reply("Choose limit order type:", { reply_markup: kb })
@@ -263,6 +264,11 @@ if (data === "limit:create_tp") {
 if (data === "limit:create_sl") {
   await setCreateDraft(userId, { mode: "LIMIT", limitSubType: "stop_loss", condition: "LTE" })
   await ctx.reply("🧩 Send token mint for Stop Loss (sell when price ≤ target).")
+  return
+}
+if (data === "limit:create_trailing") {
+  await setCreateDraft(userId, { mode: "LIMIT", limitSubType: "trailing_stop" })
+  await ctx.reply("🧩 Send token mint for Trailing Stop (sell when price drops % from peak).")
   return
 }
 
@@ -286,6 +292,23 @@ if (data.startsWith("order:cancel:")) {
   return
 }
 
+// Alerts
+if (data === "alert:create") {
+  const { alertCreateStartHandler } = await import("../handlers/alerts.handler.js")
+  return alertCreateStartHandler(ctx)
+}
+if (data.startsWith("alert:cancel:")) {
+  const alertId = data.split(":")[2]
+  const { alertCancelHandler } = await import("../handlers/alerts.handler.js")
+  return alertCancelHandler(ctx, alertId)
+}
+
+// Settings slippage
+if (data.startsWith("settings:slippage:")) {
+  const bpsStr = data.split(":")[2]
+  const { settingsSlippageCallback } = await import("../handlers/settings.handler.js")
+  return settingsSlippageCallback(ctx, bpsStr)
+}
 
   if (!data.startsWith('cmd:')) return
 

@@ -1,11 +1,19 @@
 import { Connection, VersionedTransaction } from "@solana/web3.js"
 import { loadWalletSigner } from "../blockchain/wallet.service.js"
 import { getTokenBalanceAndDecimals } from "../blockchain/balance.service.js"
-
-const JUP_QUOTE = "https://quote-api.jup.ag/v6/quote"
-const JUP_SWAP = "https://quote-api.jup.ag/v6/swap"
+import { redis } from "../config/redis.js"
+import { redisKeys } from "../utils/redisKeys.js"
+import { recordReferralTrade } from "./referral.service.js"
+import { config } from "../utils/config.js"
 
 const SOL_MINT = "So11111111111111111111111111111111111111112"
+const DEFAULT_SLIPPAGE_BPS = 100
+
+async function getSlippageBps(userId: number): Promise<number> {
+  const raw = await redis.get(redisKeys.userSlippageBps(userId))
+  const bps = raw ? Number(raw) : DEFAULT_SLIPPAGE_BPS
+  return Number.isNaN(bps) || bps < 10 || bps > 5000 ? DEFAULT_SLIPPAGE_BPS : bps
+}
 
 const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed")
 
@@ -22,18 +30,27 @@ export async function executeSwap({
 }) {
   const wallet = await loadWalletSigner(userId)
   const amountLamports = Math.floor(amountSol * 1_000_000_000)
+  const slippageBps = await getSlippageBps(userId)
 
   // 1) QUOTE
-  const quoteRes = await fetch(
-    `${JUP_QUOTE}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountLamports}&slippageBps=100`
-  )
+  let quoteRes: Response
+  try {
+    quoteRes = await fetch(
+      `${config.jupiterQuoteUrl}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountLamports}&slippageBps=${slippageBps}`
+    )
+  } catch (e: any) {
+    const msg = e?.cause?.code === 'ENOTFOUND'
+      ? `Network/DNS error: cannot reach Jupiter API (${e?.cause?.hostname ?? 'quote-api.jup.ag'}). Check internet and firewall.`
+      : (e?.message ?? 'Failed to fetch quote')
+    throw new Error(msg)
+  }
   const quoteData = await quoteRes.json()
 
   const route = quoteData?.data?.[0]
   if (!route) throw new Error("No swap route found")
 
   // 2) SWAP TX
-  const swapRes = await fetch(JUP_SWAP, {
+  const swapRes = await fetch(config.jupiterSwapUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -61,6 +78,7 @@ export async function executeSwap({
     "confirmed"
   )
 
+  recordReferralTrade(userId, amountSol).catch(() => {})
   return txid
 }
 
@@ -96,15 +114,24 @@ export async function executeSell({
   if (toSell <= 0) throw new Error("Sell amount must be positive.")
 
   const amountRaw = BigInt(Math.floor(toSell * 10 ** decimals))
+  const slippageBps = await getSlippageBps(userId)
 
-  const quoteRes = await fetch(
-    `${JUP_QUOTE}?inputMint=${tokenMint}&outputMint=${SOL_MINT}&amount=${amountRaw.toString()}&slippageBps=150`
-  )
+  let quoteRes: Response
+  try {
+    quoteRes = await fetch(
+      `${config.jupiterQuoteUrl}?inputMint=${tokenMint}&outputMint=${SOL_MINT}&amount=${amountRaw.toString()}&slippageBps=${slippageBps}`
+    )
+  } catch (e: any) {
+    const msg = e?.cause?.code === 'ENOTFOUND'
+      ? `Network/DNS error: cannot reach Jupiter API. Check internet and firewall.`
+      : (e?.message ?? 'Failed to fetch sell quote')
+    throw new Error(msg)
+  }
   const quoteData = await quoteRes.json()
   const route = quoteData?.data?.[0]
   if (!route) throw new Error("No sell route found. Low liquidity or unsupported token.")
 
-  const swapRes = await fetch(JUP_SWAP, {
+  const swapRes = await fetch(config.jupiterSwapUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -127,5 +154,9 @@ export async function executeSell({
     { signature: txid, blockhash: latest.blockhash, lastValidBlockHeight: latest.lastValidBlockHeight },
     "confirmed"
   )
+  // Approximate SOL received from sell for referral volume (quote is token→SOL)
+  const outLamports = route?.outAmount ?? 0
+  const solReceived = Number(outLamports) / 1e9
+  if (solReceived > 0) recordReferralTrade(userId, solReceived).catch(() => {})
   return txid
 }

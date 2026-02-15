@@ -3,15 +3,23 @@ import { getUserOrders } from "../services/orders.store.js"
 
 function formatLimitOrder(o: any): string {
   const sub = o.limitSubType ?? "buy"
+  const shortMint = o.tokenMint?.slice(0, 8) ? `${o.tokenMint.slice(0, 8)}…` : "token"
+  if (sub === "trailing_stop") {
+    return `• ${o.active ? "🟢" : "⚪"} *Trailing Stop* sell \`${shortMint}\` when price drops *${o.trailPercentPct ?? 10}%* from peak\n  ID: \`${o.id}\``
+  }
   const cond = o.condition === "LTE" ? "≤" : "≥"
-  const priceStr = `when price *${cond} $${o.targetPriceUsd}*`
+  const priceStr = o.triggerType === "multiple"
+    ? `when price ${cond} *${o.targetMultiple}x* ref`
+    : o.triggerType === "percent"
+      ? `when price ${cond} *${o.targetPercentChange}%* ref`
+      : `when price *${cond} $${o.targetPriceUsd}*`
   if (sub === "take_profit") {
-    return `• ${o.active ? "🟢" : "⚪"} *Take Profit* sell \`${o.tokenMint.slice(0, 8)}…\` ${priceStr}\n  ID: \`${o.id}\``
+    return `• ${o.active ? "🟢" : "⚪"} *Take Profit* sell \`${shortMint}\` ${priceStr}\n  ID: \`${o.id}\``
   }
   if (sub === "stop_loss") {
-    return `• ${o.active ? "🟢" : "⚪"} *Stop Loss* sell \`${o.tokenMint.slice(0, 8)}…\` ${priceStr}\n  ID: \`${o.id}\``
+    return `• ${o.active ? "🟢" : "⚪"} *Stop Loss* sell \`${shortMint}\` ${priceStr}\n  ID: \`${o.id}\``
   }
-  return `• ${o.active ? "🟢" : "⚪"} *${o.amountSol} SOL* → \`${o.tokenMint.slice(0, 8)}…\` ${priceStr}\n  ID: \`${o.id}\``
+  return `• ${o.active ? "🟢" : "⚪"} *${o.amountSol} SOL* → \`${shortMint}\` ${priceStr}\n  ID: \`${o.id}\``
 }
 
 export async function limitOrdersHandler(ctx: Context) {

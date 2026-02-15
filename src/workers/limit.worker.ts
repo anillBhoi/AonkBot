@@ -8,6 +8,42 @@ const SOL_MINT = "So11111111111111111111111111111111111111112"
 const MIN_LIQ_USD = 5000
 const REQUIRED_HITS = 2
 
+function resolveTriggerPrice(order: any, price: number, mcap: number): number {
+  const triggerType = order.triggerType ?? "price"
+  if (triggerType === "price") return order.targetPriceUsd
+  if (triggerType === "mcap" && order.targetMcapUsd != null) return order.targetMcapUsd
+  if (triggerType === "multiple" && order.referencePrice != null && order.targetMultiple != null)
+    return order.referencePrice * order.targetMultiple
+  if (triggerType === "percent" && order.referencePrice != null && order.targetPercentChange != null)
+    return order.referencePrice * (1 + order.targetPercentChange / 100)
+  return order.targetPriceUsd
+}
+
+function shouldTriggerOrder(order: any, price: number, mcap: number): boolean {
+  const subType = order.limitSubType ?? "buy"
+
+  if (subType === "trailing_stop") {
+    const trail = order.trailPercentPct ?? 10
+    let peak = order.peakPrice ?? price
+    if (price > peak) peak = price
+    order.peakPrice = peak
+    const threshold = peak * (1 - trail / 100)
+    return price <= threshold
+  }
+
+  const triggerType = order.triggerType ?? "price"
+  let target: number
+  let current: number
+  if (triggerType === "mcap") {
+    target = order.targetMcapUsd ?? order.targetPriceUsd
+    current = mcap
+  } else {
+    target = resolveTriggerPrice(order, price, mcap)
+    current = price
+  }
+  return order.condition === "LTE" ? current <= target : current >= target
+}
+
 export async function startLimitWorker() {
   setInterval(async () => {
     try {
@@ -35,25 +71,45 @@ export async function startLimitWorker() {
         }
 
         const price = Number(info.price)
-        const shouldTrigger =
-          order.condition === "LTE" ? price <= order.targetPriceUsd : price >= order.targetPriceUsd
+        const mcap = Number(info.mcap ?? 0)
 
-        order.lastCheckedAt = now
-        order.consecutiveHits = order.consecutiveHits ?? 0
-
-        if (!shouldTrigger) {
-          order.consecutiveHits = 0
-          await saveOrder(order)
-          continue
+        if (order.limitSubType === "trailing_stop") {
+          const trail = order.trailPercentPct ?? 10
+          let peak = order.peakPrice ?? price
+          if (price > peak) peak = price
+          order.peakPrice = peak
+          order.lastCheckedAt = now
+          const threshold = peak * (1 - trail / 100)
+          if (price > threshold) {
+            order.consecutiveHits = 0
+            await saveOrder(order)
+            continue
+          }
+          order.consecutiveHits = (order.consecutiveHits ?? 0) + 1
+          if (order.consecutiveHits < REQUIRED_HITS) {
+            await saveOrder(order)
+            continue
+          }
+        } else {
+          const shouldTrigger = shouldTriggerOrder(order, price, mcap)
+          order.lastCheckedAt = now
+          order.consecutiveHits = order.consecutiveHits ?? 0
+          if (!shouldTrigger) {
+            order.consecutiveHits = 0
+            await saveOrder(order)
+            continue
+          }
+          order.consecutiveHits += 1
+          if (order.consecutiveHits < REQUIRED_HITS) {
+            await saveOrder(order)
+            continue
+          }
         }
 
-        order.consecutiveHits += 1
-        if (order.consecutiveHits < REQUIRED_HITS) {
-          await saveOrder(order)
-          continue
-        }
-
-        const isSellOrder = order.limitSubType === "take_profit" || order.limitSubType === "stop_loss"
+        const isSellOrder =
+          order.limitSubType === "take_profit" ||
+          order.limitSubType === "stop_loss" ||
+          order.limitSubType === "trailing_stop"
 
         try {
           if (isSellOrder) {

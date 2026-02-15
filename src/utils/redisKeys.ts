@@ -61,4 +61,17 @@ export const redisKeys = {
 
   refInviter: (referredUserId: number) => `ref:inviter:${referredUserId}`,
   refReferredSet: (inviterId: number) => `ref:referred:${inviterId}`,
+  refVolumeSol: (inviterId: number) => `ref:volume_sol:${inviterId}`,
+  refTradeCount: (inviterId: number) => `ref:trade_count:${inviterId}`,
+
+  /* ===== Price Alerts ===== */
+
+  userAlerts: (userId: number) => `alerts:user:${userId}`,
+  alert: (alertId: string) => `alert:${alertId}`,
+  activeAlerts: () => `alerts:active`,
+  alertDraft: (userId: number) => `alert:draft:${userId}`,
+
+  /* ===== User Settings ===== */
+
+  userSlippageBps: (userId: number) => `settings:slippage_bps:${userId}`,
 }

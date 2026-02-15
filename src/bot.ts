@@ -26,6 +26,7 @@ import { saveOrder } from "./services/orders.store.js"
 import { clearCreateDraft, getCreateDraft, setCreateDraft } from "./core/state/orderCreate.state.js"
 import { startDcaWorker } from "./workers/dca.worker.js"
 import { startLimitWorker } from "./workers/limit.worker.js"
+import { startAlertsWorker } from "./workers/alerts.worker.js"
 
 export const bot = new Bot(config.botToken)
 
@@ -141,11 +142,44 @@ if (draft) {
 
     if (draft.mode === "DCA") {
       await ctx.reply("✅ Now send DCA amount in SOL (example: 0.2)")
+    } else if (draft.mode === "LIMIT" && draft.limitSubType === "trailing_stop") {
+      await ctx.reply("✅ Send trail % (e.g. 10 = sell when price drops 10% from peak)")
     } else if (draft.mode === "LIMIT" && (draft.limitSubType === "take_profit" || draft.limitSubType === "stop_loss")) {
       await ctx.reply("✅ Now send target price in USD (example: 0.00005)")
     } else {
       await ctx.reply("✅ Now send buy amount in SOL (example: 0.2)")
     }
+    return
+  }
+
+  // Step 2b: Trailing stop trail % (mint already set)
+  if (draft.mode === "LIMIT" && draft.limitSubType === "trailing_stop" && draft.trailPercentPct == null) {
+    const trail = Number(text)
+    if (Number.isNaN(trail) || trail < 1 || trail > 50) {
+      await ctx.reply("❌ Send a trail % between 1 and 50 (e.g. 10)")
+      return
+    }
+    draft.trailPercentPct = trail
+    const order = {
+      id: `limit_${Date.now()}_${Math.floor(Math.random() * 1e6)}`,
+      type: "LIMIT" as const,
+      userId: from.id,
+      tokenMint: draft.tokenMint!,
+      amountSol: 0,
+      targetPriceUsd: 0,
+      condition: "LTE" as const,
+      active: true,
+      createdAt: Date.now(),
+      limitSubType: "trailing_stop" as const,
+      sellAmountPortion: 1,
+      trailPercentPct: draft.trailPercentPct,
+    }
+    await saveOrder(order)
+    await clearCreateDraft(from.id)
+    await ctx.reply(
+      `✅ Trailing stop created!\n\n• \`${order.tokenMint}\`\n• Sell when price drops ${draft.trailPercentPct}% from peak\n• ID: \`${order.id}\``,
+      { parse_mode: "Markdown" }
+    )
     return
   }
 
@@ -200,18 +234,39 @@ if (draft) {
     return
   }
 
-  // Step 3b: Limit target price (and create order)
-  if (draft.mode === "LIMIT" && draft.targetPriceUsd == null) {
+  // Step 3b: Limit target price (and create order) — skip for trailing_stop (handled above)
+  if (draft.mode === "LIMIT" && draft.limitSubType !== "trailing_stop" && draft.targetPriceUsd == null) {
     const p = Number(text)
-    if (Number.isNaN(p) || p <= 0) {
-      await ctx.reply("❌ Invalid price. Example: 0.00005")
+    if (Number.isNaN(p)) {
+      await ctx.reply("❌ Invalid. Send price in USD (e.g. 0.00005), multiple (e.g. 0.5 or 2), or % change (e.g. -10 or +20)")
       return
     }
-    draft.targetPriceUsd = p
 
     const subType = draft.limitSubType ?? "buy"
     const isSellOrder = subType === "take_profit" || subType === "stop_loss"
     const condition = draft.condition ?? (subType === "take_profit" ? "GTE" : subType === "stop_loss" ? "LTE" : "LTE")
+
+    let triggerType: "price" | "multiple" | "percent" = "price"
+    let targetPriceUsd = p
+    let referencePrice: number | undefined
+    let targetMultiple: number | undefined
+    let targetPercentChange: number | undefined
+
+    if (p >= -99 && p <= 99 && p !== 0 && Number.isInteger(p)) {
+      triggerType = "percent"
+      targetPercentChange = p
+      const { fetchTokenInfo } = await import("./services/token.service.js")
+      const info = await fetchTokenInfo(draft.tokenMint!)
+      referencePrice = info?.price ? Number(info.price) : undefined
+      targetPriceUsd = referencePrice != null ? referencePrice * (1 + p / 100) : p
+    } else if (p >= 0.1 && p <= 20) {
+      triggerType = "multiple"
+      targetMultiple = p
+      const { fetchTokenInfo } = await import("./services/token.service.js")
+      const info = await fetchTokenInfo(draft.tokenMint!)
+      referencePrice = info?.price ? Number(info.price) : undefined
+      targetPriceUsd = referencePrice != null ? referencePrice * p : p
+    }
 
     const order = {
       id: `limit_${Date.now()}_${Math.floor(Math.random() * 1e6)}`,
@@ -219,20 +274,29 @@ if (draft) {
       userId: from.id,
       tokenMint: draft.tokenMint!,
       amountSol: isSellOrder ? 0 : (draft.amountSol ?? 0),
-      targetPriceUsd: draft.targetPriceUsd,
+      targetPriceUsd,
       condition,
       active: true,
       createdAt: Date.now(),
       limitSubType: subType,
       sellAmountPortion: draft.sellAmountPortion ?? 1,
+      triggerType,
+      referencePrice,
+      targetMultiple,
+      targetPercentChange,
     }
 
     await saveOrder(order)
     await clearCreateDraft(from.id)
 
-    const desc = isSellOrder
-      ? `Sell when price ${condition === "GTE" ? "≥" : "≤"} $${draft.targetPriceUsd}`
-      : `${order.amountSol} SOL → token when price ${condition === "LTE" ? "≤" : "≥"} $${draft.targetPriceUsd}`
+    const desc =
+      triggerType === "multiple"
+        ? `when price ${condition === "LTE" ? "≤" : "≥"} ${targetMultiple}x current`
+        : triggerType === "percent"
+          ? `when price ${condition === "LTE" ? "≤" : "≥"} ${targetPercentChange}% vs current`
+          : isSellOrder
+            ? `Sell when price ${condition === "GTE" ? "≥" : "≤"} $${targetPriceUsd}`
+            : `${order.amountSol} SOL → token when price ${condition === "LTE" ? "≤" : "≥"} $${targetPriceUsd}`
     await ctx.reply(
       `✅ Limit order created!\n\n• \`${order.tokenMint}\`\n• ${desc}\n• ID: \`${order.id}\``,
       { parse_mode: "Markdown" }
@@ -308,6 +372,26 @@ if (draft) {
       }
 
       /* ───────────────────────────────
+         SLIPPAGE DRAFT (Settings)
+      ─────────────────────────────── */
+      const { handleSlippageDraftMessage } = await import("./handlers/settings.handler.js")
+      const slippageResult = await handleSlippageDraftMessage(from.id, ctx.message.text)
+      if (slippageResult.reply) {
+        await ctx.reply(slippageResult.reply)
+        return
+      }
+
+      /* ───────────────────────────────
+         ALERT DRAFT FLOW
+      ─────────────────────────────── */
+      const { handleAlertDraftMessage } = await import("./handlers/alerts.handler.js")
+      const alertResult = await handleAlertDraftMessage(from.id, ctx.message.text)
+      if (alertResult.reply) {
+        await ctx.reply(alertResult.reply, { parse_mode: "Markdown" })
+        return
+      }
+
+      /* ───────────────────────────────
          DEFAULT COMMAND ROUTING
       ─────────────────────────────── */
 
@@ -340,6 +424,7 @@ if (draft) {
   ═══════════════════════════════════════════ */
 startDcaWorker()
 startLimitWorker()
+startAlertsWorker()
   await bot.start()
   console.log("[Bot] 🚀 Running")
 }

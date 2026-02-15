@@ -16,7 +16,10 @@ export interface DcaOrder {
   runs: number
 }
 
-export type LimitSubType = "buy" | "take_profit" | "stop_loss"
+export type LimitSubType = "buy" | "take_profit" | "stop_loss" | "trailing_stop"
+
+/** How the limit order target is specified (BonkBot-style) */
+export type LimitTriggerType = "price" | "mcap" | "multiple" | "percent"
 
 export interface LimitOrder {
   id: string
@@ -31,10 +34,23 @@ export interface LimitOrder {
   createdAt: number
   lastCheckedAt?: number
   triggeredAt?: number
-  /** buy = limit buy (SOL→token); take_profit = sell when price ≥ target; stop_loss = sell when price ≤ target */
   limitSubType?: LimitSubType
-  /** For take_profit/stop_loss: fraction of token balance to sell (0–1). Default 1 */
   sellAmountPortion?: number
+  /** Trailing stop: track peak price, sell when price drops by this % from peak */
+  trailPercentPct?: number
+  /** For trailing_stop: highest price seen */
+  peakPrice?: number
+  /** Trigger by: price (USD), mcap (USD), multiple of ref price (e.g. 0.5), or percent change from ref */
+  triggerType?: LimitTriggerType
+  /** Reference price at order creation (for multiple/percent) */
+  referencePrice?: number
+  referenceMcap?: number
+  /** e.g. 0.5 = 50% of ref price, 2 = 200% */
+  targetMultiple?: number
+  /** e.g. -10 = trigger when 10% below ref, +20 = 20% above */
+  targetPercentChange?: number
+  /** Target mcap in USD (K/M/B parsed to number) */
+  targetMcapUsd?: number
 }
 
 const keyUserOrders = (userId: number) => `orders:${userId}` // hash: orderId -> json

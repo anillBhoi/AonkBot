@@ -13,6 +13,11 @@ export interface CreateDraft {
   condition?: "LTE" | "GTE"
   limitSubType?: LimitSubType
   sellAmountPortion?: number
+  trailPercentPct?: number
+  triggerType?: import("../../services/orders.store.js").LimitTriggerType
+  targetMultiple?: number
+  targetPercentChange?: number
+  targetMcapUsd?: number
 }
 
 const key = (userId: number) => `order:create:${userId}`
