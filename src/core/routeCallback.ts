@@ -30,6 +30,8 @@ import { clearWithdrawState } from './state/withdraw.state.js'
 import { redisKeys } from '../utils/redisKeys.js'
 import { executeSwap } from '../services/swap.service.js'
 import { setBuyXState } from './state/buyX.state.js'
+import { setOrderInactive } from '../services/orders.store.js'
+import { setCreateDraft } from './state/orderCreate.state.js'
 
 /* ─────────────────────────────────────────────
    Clear All Conversational States
@@ -174,9 +176,45 @@ export async function routeCallback(ctx: Context): Promise<void> {
     return
   }
 
+
+
   /* ─────────────────────────────────────────
      GENERIC COMMAND CALLBACKS
   ───────────────────────────────────────── */
+ // ─── DCA create flow ───
+if (data === "dca:create") {
+  await setCreateDraft(userId, { mode: "DCA" })
+  await ctx.reply("🧩 Send token mint for DCA (pump.fun / Solana mint).")
+  return
+}
+
+if (data === "limit:create") {
+  await setCreateDraft(userId, { mode: "LIMIT", condition: "LTE" })
+  await ctx.reply("🧩 Send token mint for Limit order.")
+  return
+}
+
+// Cancel order by ID prompt
+if (data === "dca:cancel_prompt") {
+  await ctx.reply("Send DCA order ID to cancel (example: dca_...)")
+  await setCreateDraft(userId, { mode: "DCA" }) // reuse draft for prompt context
+  return
+}
+if (data === "limit:cancel_prompt") {
+  await ctx.reply("Send Limit order ID to cancel (example: limit_...)")
+  await setCreateDraft(userId, { mode: "LIMIT" })
+  return
+}
+
+// Cancel by clicking
+if (data.startsWith("order:cancel:")) {
+  const orderId = data.split(":")[2]
+  await setOrderInactive(orderId)
+  await ctx.reply("✅ Order cancelled.")
+  return
+}
+
+
   if (!data.startsWith('cmd:')) return
 
   const command = data.replace('cmd:', '')
@@ -189,4 +227,8 @@ export async function routeCallback(ctx: Context): Promise<void> {
 
   const handler = routes[command] ?? unknownHandler
   await handler(ctx)
+}
+
+function id(prefix: string) {
+  return `${prefix}_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
 }

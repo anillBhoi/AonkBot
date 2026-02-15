@@ -23,6 +23,8 @@ import { buyToken } from '../handlers/buyToken.handler.js'
 import { extractSolanaMint } from '../utils/tokenDetector.js'
 
 import { tokenInfoHandler } from '../handlers/tokenInfo.handler.js'
+import { dcaOrdersHandler } from '../handlers/dcaOrders.handler.js'
+import { limitOrdersHandler } from '../handlers/limitOrders.handler.js'
 
 /* ===== ROUTES ===== */
 
@@ -40,6 +42,8 @@ export const routes: Record<string, (ctx: Context) => Promise<void>> = {
   buytoken: buyToken,
   deposit: deposit,
   txs: txsHandler,
+  dcaorders: dcaOrdersHandler,
+  limitorders: limitOrdersHandler,
   withdraw: withdrawMenuHandler,
   help: helpHandler,
   managetkn: manageToken,

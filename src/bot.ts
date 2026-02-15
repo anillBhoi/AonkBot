@@ -21,6 +21,8 @@ import { redisKeys } from "./utils/redisKeys.js"
 
 import { clearBuyXState, getBuyXState } from "./core/state/buyX.state.js"
 import { executeSwap } from "./services/swap.service.js"
+import { saveOrder } from "./services/orders.store.js"
+import { clearCreateDraft, getCreateDraft, setCreateDraft } from "./core/state/orderCreate.state.js"
 
 export const bot = new Bot(config.botToken)
 
@@ -76,6 +78,116 @@ export async function startBot() {
 
         return
       }
+
+
+      const draft = await getCreateDraft(from.id)
+
+if (draft) {
+  const text = ctx.message.text.trim()
+
+  // If user pasted an orderId to cancel
+  if ((draft.mode === "DCA" || draft.mode === "LIMIT") && text.startsWith("dca_") || text.startsWith("limit_")) {
+    // optional: handle cancel by text
+  }
+
+  // Step 1: token mint
+  if (!draft.tokenMint) {
+    // very light validation
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(text)) {
+      await ctx.reply("❌ Invalid mint. Send a valid Solana mint address.")
+      return
+    }
+    draft.tokenMint = text
+    await setCreateDraft(from.id, draft)
+
+    await ctx.reply(draft.mode === "DCA"
+      ? "✅ Now send DCA amount in SOL (example: 0.2)"
+      : "✅ Now send buy amount in SOL (example: 0.2)"
+    )
+    return
+  }
+
+  // Step 2: amount SOL
+  if (!draft.amountSol) {
+    const amountSol = Number(text)
+    if (Number.isNaN(amountSol) || amountSol <= 0) {
+      await ctx.reply("❌ Invalid amount. Example: 0.2")
+      return
+    }
+    draft.amountSol = amountSol
+    await setCreateDraft(from.id, draft)
+
+    if (draft.mode === "DCA") {
+      await ctx.reply("✅ Now send interval in minutes (example: 30)")
+    } else {
+      await ctx.reply("✅ Now send target price in USD (example: 0.00005)")
+    }
+    return
+  }
+
+  // Step 3a: DCA interval
+  if (draft.mode === "DCA" && !draft.intervalMinutes) {
+    const m = Number(text)
+    if (Number.isNaN(m) || m < 1) {
+      await ctx.reply("❌ Invalid interval. Example: 30")
+      return
+    }
+    draft.intervalMinutes = Math.floor(m)
+
+    const order = {
+      id: `dca_${Date.now()}_${Math.floor(Math.random() * 1e6)}`,
+      type: "DCA" as const,
+      userId: from.id,
+      tokenMint: draft.tokenMint!,
+      amountSol: draft.amountSol!,
+      intervalMinutes: draft.intervalMinutes!,
+      nextRunAt: Date.now() + draft.intervalMinutes! * 60_000,
+      active: true,
+      createdAt: Date.now(),
+      runs: 0
+    }
+
+    await saveOrder(order)
+    await clearCreateDraft(from.id)
+
+    await ctx.reply(
+      `✅ DCA created!\n\n• ${order.amountSol} SOL → \`${order.tokenMint}\`\n• Every ${order.intervalMinutes} min\n• ID: \`${order.id}\``,
+      { parse_mode: "Markdown" }
+    )
+    return
+  }
+
+  // Step 3b: Limit target price
+  if (draft.mode === "LIMIT" && !draft.targetPriceUsd) {
+    const p = Number(text)
+    if (Number.isNaN(p) || p <= 0) {
+      await ctx.reply("❌ Invalid price. Example: 0.00005")
+      return
+    }
+    draft.targetPriceUsd = p
+
+    const order = {
+      id: `limit_${Date.now()}_${Math.floor(Math.random() * 1e6)}`,
+      type: "LIMIT" as const,
+      userId: from.id,
+      tokenMint: draft.tokenMint!,
+      amountSol: draft.amountSol!,
+      targetPriceUsd: draft.targetPriceUsd!,
+      condition: draft.condition ?? "LTE",
+      active: true,
+      createdAt: Date.now()
+    }
+
+    await saveOrder(order)
+    await clearCreateDraft(from.id)
+
+    await ctx.reply(
+      `✅ Limit order created!\n\n• ${order.amountSol} SOL → \`${order.tokenMint}\`\n• Trigger when price ≤ $${order.targetPriceUsd}\n• ID: \`${order.id}\``,
+      { parse_mode: "Markdown" }
+    )
+    return
+  }
+}
 
       /* ───────────────────────────────
          TOTP EXPORT FLOW
