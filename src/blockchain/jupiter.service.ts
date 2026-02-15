@@ -4,11 +4,7 @@ import { VersionedTransaction } from '@solana/web3.js'
 import { TOKENS } from '../utils/tokens.js'
 import { config } from '../utils/config.js'
 import { getPriceFromCoinGecko } from './coingecko.service.js'
-// <<<<<<< HEAD
-// //import { getQuoteDevnet, ensurePoolExistsOrSetup, buildSwapTxDevnet } from './devnetDex.service.js'
-// =======
-// import { getQuoteDevnet, ensurePoolExistsOrSetup, buildSwapTxDevnet } from './devnetDex.service.js'
-// >>>>>>> 3125221f94ee30dfa87785544945241e3f5fad73
+import { getQuoteDevnet, ensurePoolExistsOrSetup, buildSwapTxDevnet } from './devnetDex.service.js'
 import fs from 'fs'
 import path from 'path'
 
@@ -86,39 +82,21 @@ async function getQuoteFromCoinGecko(
   }
 
   // If configured to use Devnet DEX and we're on devnet, try Devnet DEX first
-// <<<<<<< HEAD
-  // if (config.useDevnetDex && config.solanaCluster === 'devnet') {
-  //   try {
-  //     const devnetQuote = await getQuoteDevnet(input.mint, output.mint, amount)
-  //     if (devnetQuote) {
-  //       console.log('[DevnetDEX] Using Devnet DEX for quote')
-  //       return {
-  //         inAmount: devnetQuote.inAmount,
-  //         outAmount: devnetQuote.outAmount,
-  //         priceImpactPct: devnetQuote.priceImpactPct ?? 0
-  //       }
-  //     }
-  //   } catch (e) {
-  //     console.warn('[DevnetDEX] Quote failed, continuing to Jupiter/CoinGecko fallback', e)
-  //   }
-  // }
-// =======
-//   if (config.useDevnetDex && config.solanaCluster === 'devnet') {
-//     try {
-//       const devnetQuote = await getQuoteDevnet(input.mint, output.mint, amount)
-//       if (devnetQuote) {
-//         console.log('[DevnetDEX] Using Devnet DEX for quote')
-//         return {
-//           inAmount: devnetQuote.inAmount,
-//           outAmount: devnetQuote.outAmount,
-//           priceImpactPct: devnetQuote.priceImpactPct ?? 0
-//         }
-//       }
-//     } catch (e) {
-//       console.warn('[DevnetDEX] Quote failed, continuing to Jupiter/CoinGecko fallback', e)
-//     }
-//   }
-// >>>>>>> 3125221f94ee30dfa87785544945241e3f5fad73
+  if (config.useDevnetDex && config.solanaCluster === 'devnet') {
+    try {
+      const devnetQuote = await getQuoteDevnet(input.mint, output.mint, amount)
+      if (devnetQuote) {
+        console.log('[DevnetDEX] Using Devnet DEX for quote')
+        return {
+          inAmount: devnetQuote.inAmount,
+          outAmount: devnetQuote.outAmount,
+          priceImpactPct: devnetQuote.priceImpactPct ?? 0
+        }
+      }
+    } catch (e) {
+      console.warn('[DevnetDEX] Quote failed, continuing to Jupiter/CoinGecko fallback', e)
+    }
+  }
 
   // Use mock mode if enabled
   if (MOCK_MODE) {
@@ -179,7 +157,7 @@ async function getQuoteFromCoinGecko(
  * Get swap route from Jupiter
  */
 export async function getSwapRoute(intent: TradeIntent) {
-  console.log('[getSwapRoute] MOCK_MODE:', MOCK_MODE, 'useDevnetDex:', config.useDevnetDex, 'cluster:', config.solanaCluster, 'intent:', { 
+  console.log('[getSwapRoute] MOCK_MODE:', MOCK_MODE, 'intent:', { 
     inputMint: intent.inputMint, 
     outputMint: intent.outputMint 
   })
@@ -200,175 +178,56 @@ export async function getSwapRoute(intent: TradeIntent) {
     }
   }
 
-  // On devnet, we MUST use devnet DEX - Jupiter API doesn't work on devnet
-  if (config.solanaCluster === 'devnet') {
-    if (!config.useDevnetDex) {
-      console.error('[getSwapRoute] ❌ CRITICAL: On devnet but USE_DEVNET_DEX is not enabled!')
-      console.error('[getSwapRoute] Please set USE_DEVNET_DEX=true in your .env file')
-      throw new Error('Devnet swaps require USE_DEVNET_DEX=true. Please add USE_DEVNET_DEX=true to your .env file and restart the bot.')
+  // If using devnet dex and cluster is devnet, attempt to ensure pool exists and return a synthetic route
+  if (config.useDevnetDex && config.solanaCluster === 'devnet') {
+    try {
+      console.log('[getSwapRoute] Attempting to resolve route via Devnet DEX')
+      const pool = await ensurePoolExistsOrSetup(intent.inputMint, intent.outputMint)
+      if (!pool) {
+        console.error('[getSwapRoute] No pool found on Devnet')
+        const poolFile = path.resolve('.devnet', 'pool.json')
+        const adminFile = path.resolve('.devnet', 'admin.json')
+        let errorMsg = 'No devnet pool found. '
+        if (!fs.existsSync(poolFile) || !fs.existsSync(adminFile)) {
+          errorMsg += 'Please run: `node scripts/devnet-setup.js` to create the devnet pool. '
+        } else {
+          errorMsg += 'Pool file exists but pool setup may be incomplete. Check .devnet/pool.json and ensure USE_DEVNET_DEX=true is set.'
+        }
+        throw new Error(errorMsg)
+      }
+
+      // Determine the expected output using constant-product approximation
+      const inAmount = typeof intent.amountLamports === 'bigint' ? Number(intent.amountLamports) : Number(intent.amountLamports)
+      // convert lamports to SOL if input is SOL mint
+      const inputIsSol = intent.inputMint === TOKENS.SOL.mint
+      const amountInSol = inputIsSol ? inAmount / 1_000_000_000 : inAmount
+
+      const quote = await getQuoteDevnet(intent.inputMint, intent.outputMint, amountInSol)
+      if (!quote) {
+        console.error('[getSwapRoute] Failed to get devnet quote')
+        throw new Error('Failed to get devnet quote. Pool may not have sufficient liquidity.')
+      }
+
+      console.log('[getSwapRoute] ✅ Successfully got devnet route')
+      return {
+        inAmount: quote.inAmount,
+        outAmount: quote.outAmount,
+        priceImpactPct: quote.priceImpactPct || 0,
+        poolAddress: pool.poolAddress
+      }
+    } catch (e) {
+      console.error('[getSwapRoute] Devnet DEX route resolution failed:', e)
+      // On devnet, don't fall through to Jupiter - throw the error instead
+      if (config.solanaCluster === 'devnet') {
+        throw new Error(`Devnet DEX failed: ${e instanceof Error ? e.message : String(e)}. Ensure devnet pool is set up correctly.`)
+      }
+      // Only fall through to Jupiter if not on devnet
+      console.warn('[getSwapRoute] Falling back to Jupiter (not on devnet)')
     }
-
-    // If using devnet dex and cluster is devnet, attempt to ensure pool exists and return a synthetic route
-    // (we already checked useDevnetDex above, so this will always be true here)
-// <<<<<<< HEAD
-    // try {
-    //   console.log('[getSwapRoute] Attempting to resolve route via Devnet DEX')
-    //   const pool = await ensurePoolExistsOrSetup(intent.inputMint, intent.outputMint)
-    //   if (!pool) {
-    //     console.error('[getSwapRoute] No pool found on Devnet')
-    //     const poolFile = path.resolve('.devnet', 'pool.json')
-    //     const adminFile = path.resolve('.devnet', 'admin.json')
-    //     let errorMsg = 'No devnet pool found. '
-    //     if (!fs.existsSync(poolFile) || !fs.existsSync(adminFile)) {
-    //       errorMsg += 'Please run: `node scripts/devnet-setup.js` to create the devnet pool. '
-    //     } else {
-    //       errorMsg += 'Pool file exists but pool setup may be incomplete. Check .devnet/pool.json and ensure USE_DEVNET_DEX=true is set.'
-    //     }
-    //     throw new Error(errorMsg)
-    //   }
-
-    //   // Determine the expected output using constant-product approximation
-    //   const inAmount = typeof intent.amountLamports === 'bigint' ? Number(intent.amountLamports) : Number(intent.amountLamports)
-    //   // convert lamports to SOL if input is SOL mint
-    //   const inputIsSol = intent.inputMint === TOKENS.SOL.mint
-    //   const amountInSol = inputIsSol ? inAmount / 1_000_000_000 : inAmount
-
-    //   const quote = await getQuoteDevnet(intent.inputMint, intent.outputMint, amountInSol)
-    //   if (!quote) {
-    //     console.error('[getSwapRoute] Failed to get devnet quote')
-    //     throw new Error('Failed to get devnet quote. Pool may not have sufficient liquidity.')
-    //   }
-
-    //   console.log('[getSwapRoute] ✅ Successfully got devnet route')
-    //   return {
-    //     inAmount: quote.inAmount,
-    //     outAmount: quote.outAmount,
-    //     priceImpactPct: quote.priceImpactPct || 0,
-    //     poolAddress: pool.poolAddress
-    //   }
-    // } catch (e) {
-    //   console.error('[getSwapRoute] Devnet DEX route resolution failed:', e)
-    //   // On devnet, don't fall through to Jupiter - throw a helpful error
-    //   if (config.solanaCluster === 'devnet') {
-    //     const errorMsg = e instanceof Error ? e.message : String(e)
-        
-    //     // Check if pool.json has MISSING values
-    //     const poolFile = path.resolve('.devnet', 'pool.json')
-    //     if (fs.existsSync(poolFile)) {
-    //       try {
-    //         const poolRaw = JSON.parse(fs.readFileSync(poolFile, 'utf8'))
-    //         if (poolRaw.poolTokenAccount === 'MISSING' || poolRaw.tokenMint === 'MISSING') {
-    //           throw new Error(
-    //             `❌ Devnet pool setup incomplete!\n\n` +
-    //             `Your .devnet/pool.json has MISSING values. This means devnet-setup.js failed because:\n` +
-    //             `1. Admin key has no SOL (devnet faucet is rate-limited)\n` +
-    //             `2. You need to fund the admin key manually\n\n` +
-    //             `**Fix steps:**\n` +
-    //             `1. Fund admin key: HdeRc2G4Lz8MwnZRfCg1p2zTbAsYq2Y2tZgmtRNaSo (get from .devnet/admin.json)\n` +
-    //             `2. Visit https://faucet.solana.com and fund it with devnet SOL\n` +
-    //             `3. Run: node scripts/devnet-setup.js --force\n` +
-    //             `4. Then try swapping again\n\n` +
-    //             `OR use a real devnet pool by setting DEVNET_USDC_MINT in .env`
-    //           )
-    //         }
-    //       } catch (parseErr) {
-    //         // If we can't parse, use original error
-    //       }
-    //     }
-        
-    //     throw new Error(
-    //       `Devnet DEX failed: ${errorMsg}\n\n` +
-    //       `**Possible issues:**\n` +
-    //       `1. Pool not set up - Run: node scripts/devnet-setup.js\n` +
-    //       `2. USE_DEVNET_DEX not set - Add USE_DEVNET_DEX=true to .env\n` +
-    //       `3. Pool.json has MISSING values - Fund admin key and re-run setup\n` +
-    //       `4. No devnet pools found - Check Raydium devnet API or create your own pool`
-    //     )
-    //   }
-    // }
-// =======
-//     try {
-//       console.log('[getSwapRoute] Attempting to resolve route via Devnet DEX')
-//       const pool = await ensurePoolExistsOrSetup(intent.inputMint, intent.outputMint)
-//       if (!pool) {
-//         console.error('[getSwapRoute] No pool found on Devnet')
-//         const poolFile = path.resolve('.devnet', 'pool.json')
-//         const adminFile = path.resolve('.devnet', 'admin.json')
-//         let errorMsg = 'No devnet pool found. '
-//         if (!fs.existsSync(poolFile) || !fs.existsSync(adminFile)) {
-//           errorMsg += 'Please run: `node scripts/devnet-setup.js` to create the devnet pool. '
-//         } else {
-//           errorMsg += 'Pool file exists but pool setup may be incomplete. Check .devnet/pool.json and ensure USE_DEVNET_DEX=true is set.'
-//         }
-//         throw new Error(errorMsg)
-//       }
-
-//       // Determine the expected output using constant-product approximation
-//       const inAmount = typeof intent.amountLamports === 'bigint' ? Number(intent.amountLamports) : Number(intent.amountLamports)
-//       // convert lamports to SOL if input is SOL mint
-//       const inputIsSol = intent.inputMint === TOKENS.SOL.mint
-//       const amountInSol = inputIsSol ? inAmount / 1_000_000_000 : inAmount
-
-//       const quote = await getQuoteDevnet(intent.inputMint, intent.outputMint, amountInSol)
-//       if (!quote) {
-//         console.error('[getSwapRoute] Failed to get devnet quote')
-//         throw new Error('Failed to get devnet quote. Pool may not have sufficient liquidity.')
-//       }
-
-//       console.log('[getSwapRoute] ✅ Successfully got devnet route')
-//       return {
-//         inAmount: quote.inAmount,
-//         outAmount: quote.outAmount,
-//         priceImpactPct: quote.priceImpactPct || 0,
-//         poolAddress: pool.poolAddress
-//       }
-//     } catch (e) {
-//       console.error('[getSwapRoute] Devnet DEX route resolution failed:', e)
-//       // On devnet, don't fall through to Jupiter - throw a helpful error
-//       if (config.solanaCluster === 'devnet') {
-//         const errorMsg = e instanceof Error ? e.message : String(e)
-        
-//         // Check if pool.json has MISSING values
-//         const poolFile = path.resolve('.devnet', 'pool.json')
-//         if (fs.existsSync(poolFile)) {
-//           try {
-//             const poolRaw = JSON.parse(fs.readFileSync(poolFile, 'utf8'))
-//             if (poolRaw.poolTokenAccount === 'MISSING' || poolRaw.tokenMint === 'MISSING') {
-//               throw new Error(
-//                 `❌ Devnet pool setup incomplete!\n\n` +
-//                 `Your .devnet/pool.json has MISSING values. This means devnet-setup.js failed because:\n` +
-//                 `1. Admin key has no SOL (devnet faucet is rate-limited)\n` +
-//                 `2. You need to fund the admin key manually\n\n` +
-//                 `**Fix steps:**\n` +
-//                 `1. Fund admin key: HdeRc2G4Lz8MwnZRfCg1p2zTbAsYq2Y2tZgmtRNaSo (get from .devnet/admin.json)\n` +
-//                 `2. Visit https://faucet.solana.com and fund it with devnet SOL\n` +
-//                 `3. Run: node scripts/devnet-setup.js --force\n` +
-//                 `4. Then try swapping again\n\n` +
-//                 `OR use a real devnet pool by setting DEVNET_USDC_MINT in .env`
-//               )
-//             }
-//           } catch (parseErr) {
-//             // If we can't parse, use original error
-//           }
-//         }
-        
-//         throw new Error(
-//           `Devnet DEX failed: ${errorMsg}\n\n` +
-//           `**Possible issues:**\n` +
-//           `1. Pool not set up - Run: node scripts/devnet-setup.js\n` +
-//           `2. USE_DEVNET_DEX not set - Add USE_DEVNET_DEX=true to .env\n` +
-//           `3. Pool.json has MISSING values - Fund admin key and re-run setup\n` +
-//           `4. No devnet pools found - Check Raydium devnet API or create your own pool`
-//         )
-//       }
-//     }
-// >>>>>>> 3125221f94ee30dfa87785544945241e3f5fad73
-//     // If we're on devnet, we should never reach here (should have returned or thrown above)
-    throw new Error('Cannot use Jupiter API on devnet. Please enable USE_DEVNET_DEX=true and set up a devnet pool.')
   }
 
   try {
-    console.log('[getSwapRoute] Using real Jupiter API (mainnet)')
+    console.log('[getSwapRoute] Using real Jupiter API (MOCK_MODE is false)')
     // Handle both BigInt and string formats for amountLamports
     const amount = typeof intent.amountLamports === 'bigint' 
       ? intent.amountLamports.toString() 
@@ -429,31 +288,17 @@ export async function buildSwapTx(
   }
 
   // If devnet dex configured and route looks like a devnet route, use devnet tx builder
-// <<<<<<< HEAD
-//   // if (config.useDevnetDex && config.solanaCluster === 'devnet' && route?.poolAddress) {
-//   //   try {
-//   //     console.log('[buildSwapTx] Building Devnet swap tx')
-//   //     // route can be passed to the devnet builder if needed
-//   //     const tx = await buildSwapTxDevnet(route, userPubkey)
-//   //     // VersionedTransaction expected by callers; devnet builder returns Transaction for now
-//   //     return tx as any
-//   //   } catch (e) {
-//   //     console.warn('[buildSwapTx] Devnet tx build failed, falling back to Jupiter', e)
-//   //   }
-//   // }
-// =======
-//   if (config.useDevnetDex && config.solanaCluster === 'devnet' && route?.poolAddress) {
-//     try {
-//       console.log('[buildSwapTx] Building Devnet swap tx')
-//       // route can be passed to the devnet builder if needed
-//       const tx = await buildSwapTxDevnet(route, userPubkey)
-//       // VersionedTransaction expected by callers; devnet builder returns Transaction for now
-//       return tx as any
-//     } catch (e) {
-//       console.warn('[buildSwapTx] Devnet tx build failed, falling back to Jupiter', e)
-//     }
-//   }
-// >>>>>>> 3125221f94ee30dfa87785544945241e3f5fad73
+  if (config.useDevnetDex && config.solanaCluster === 'devnet' && route?.poolAddress) {
+    try {
+      console.log('[buildSwapTx] Building Devnet swap tx')
+      // route can be passed to the devnet builder if needed
+      const tx = await buildSwapTxDevnet(route, userPubkey)
+      // VersionedTransaction expected by callers; devnet builder returns Transaction for now
+      return tx as any
+    } catch (e) {
+      console.warn('[buildSwapTx] Devnet tx build failed, falling back to Jupiter', e)
+    }
+  }
 
   try {
     const res = await axios.post(
@@ -478,9 +323,5 @@ export async function buildSwapTx(
   }
 }
 
-// // Backwards-compatible export: `getQuote` used by handlers
-// <<<<<<< HEAD
-// export const getQuote = getQuoteFromCoinGecko;
-// =======
-// export const getQuote = getQuoteFromCoinGecko;
-// >>>>>>> 3125221f94ee30dfa87785544945241e3f5fad73
+// Backwards-compatible export: `getQuote` used by handlers
+export const getQuote = getQuoteFromCoinGecko;

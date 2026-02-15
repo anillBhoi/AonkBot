@@ -25,6 +25,11 @@ import { extractSolanaMint } from '../utils/tokenDetector.js'
 import { tokenInfoHandler } from '../handlers/tokenInfo.handler.js'
 import { dcaOrdersHandler } from '../handlers/dcaOrders.handler.js'
 import { limitOrdersHandler } from '../handlers/limitOrders.handler.js'
+import { manageWalletsHandler } from '../handlers/manageWallets.handler.js'
+import { referHandler } from '../handlers/refer.handler.js'
+import { alertsHandler } from '../handlers/alerts.handler.js'
+import { settingsHandler } from '../handlers/settings.handler.js'
+import { openTelemetryHandler } from '../handlers/openTelemetry.handler.js'
 
 /* ===== ROUTES ===== */
 
@@ -47,6 +52,16 @@ export const routes: Record<string, (ctx: Context) => Promise<void>> = {
   withdraw: withdrawMenuHandler,
   help: helpHandler,
   managetkn: manageToken,
+
+  /* ===== Main menu callbacks ===== */
+  refresh: startHandler,
+  selectedwallet: walletHandler,
+  changewallet: manageWalletsHandler,
+
+  refer: referHandler,
+  alerts: alertsHandler,
+  settings: settingsHandler,
+  opentel: openTelemetryHandler,
 
   /* ===== Withdraw Flow ===== */
 

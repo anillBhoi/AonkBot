@@ -30,8 +30,10 @@ import { clearWithdrawState } from './state/withdraw.state.js'
 import { redisKeys } from '../utils/redisKeys.js'
 import { executeSwap } from '../services/swap.service.js'
 import { setBuyXState } from './state/buyX.state.js'
+import { setSellXState } from './state/sellX.state.js'
 import { setOrderInactive } from '../services/orders.store.js'
 import { setCreateDraft } from './state/orderCreate.state.js'
+import { executeSell } from '../services/swap.service.js'
 
 /* ─────────────────────────────────────────────
    Clear All Conversational States
@@ -126,6 +128,56 @@ export async function routeCallback(ctx: Context): Promise<void> {
   return
 }
 
+  /* ─────────────────────────────────────────
+     SELL (token → SOL)
+  ───────────────────────────────────────── */
+  if (data.startsWith('trade:sell:')) {
+    const parts = data.split(':')
+    const tokenMint = parts[2]
+    const portionStr = parts[3]
+    const portion = portionStr ? Number(portionStr) : undefined
+    if (!tokenMint) return
+    try {
+      await ctx.editMessageText('⏳ Executing sell...')
+      const txid = await executeSell({
+        userId,
+        tokenMint,
+        amountTokenPortion: portion,
+      })
+      await ctx.editMessageText(
+        `✅ Sold!\n\nToken: \`${tokenMint}\`\n` +
+        `Portion: ${portion != null ? (portion * 100) + '%' : 'custom'}\n\n` +
+        `🔗 https://solscan.io/tx/${txid}`,
+        { parse_mode: 'Markdown' }
+      )
+    } catch (err: any) {
+      await ctx.editMessageText(`❌ Sell failed: ${err.message}`)
+    }
+    return
+  }
+
+  if (data.startsWith('trade:sellx:')) {
+    const tokenMint = data.split(':')[2]
+    if (tokenMint) {
+      setSellXState(userId, tokenMint)
+      await ctx.editMessageText(
+        '💰 Enter amount of tokens to sell, or a portion between 0 and 1 (e.g. 0.5 for 50%).'
+      )
+    }
+    return
+  }
+
+  /* ─────────────────────────────────────────
+     TOKEN CARD REFRESH (re-show token info)
+  ───────────────────────────────────────── */
+  if (data.startsWith('trade:refresh:')) {
+    const tokenMint = data.split(':')[2]
+    if (tokenMint) {
+      const { tokenInfoHandler } = await import('../handlers/tokenInfo.handler.js')
+      return tokenInfoHandler(ctx, tokenMint)
+    }
+    return
+  }
 
   /* ─────────────────────────────────────────
      WALLET SELECT / CREATE

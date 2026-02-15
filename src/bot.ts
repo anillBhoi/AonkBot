@@ -20,6 +20,7 @@ import { redis } from "./config/redis.js"
 import { redisKeys } from "./utils/redisKeys.js"
 
 import { clearBuyXState, getBuyXState } from "./core/state/buyX.state.js"
+import { clearSellXState, getSellXState } from "./core/state/sellX.state.js"
 import { executeSwap } from "./services/swap.service.js"
 import { saveOrder } from "./services/orders.store.js"
 import { clearCreateDraft, getCreateDraft, setCreateDraft } from "./core/state/orderCreate.state.js"
@@ -81,15 +82,52 @@ export async function startBot() {
         return
       }
 
+      /* ───────────────────────────────
+         SELL X FLOW (amount or portion)
+      ─────────────────────────────── */
+      const sellXMint = getSellXState(from.id)
+      if (sellXMint) {
+        const raw = ctx.message.text.trim()
+        const num = Number(raw)
+        if (Number.isNaN(num) || num <= 0) {
+          await ctx.reply("❌ Enter a valid amount or portion (e.g. 0.5 for 50%).")
+          return
+        }
+        clearSellXState(from.id)
+        await ctx.reply("⚡ Executing sell...")
+        try {
+          const { executeSell } = await import("./services/swap.service.js")
+          const txid = await executeSell({
+            userId: from.id,
+            tokenMint: sellXMint,
+            amountTokenPortion: num <= 1 ? num : undefined,
+            amountToken: num > 1 ? num : undefined,
+          })
+          await ctx.reply(`✅ Sold!\n\nTX: https://solscan.io/tx/${txid}`)
+        } catch (err: any) {
+          await ctx.reply(`❌ Sell failed: ${err.message}`)
+        }
+        return
+      }
 
       const draft = await getCreateDraft(from.id)
 
 if (draft) {
   const text = ctx.message.text.trim()
 
-  // If user pasted an orderId to cancel
-  if ((draft.mode === "DCA" || draft.mode === "LIMIT") && text.startsWith("dca_") || text.startsWith("limit_")) {
-    // optional: handle cancel by text
+  // Cancel order by pasted ID (only when in cancel prompt, i.e. no tokenMint set)
+  if ((draft.mode === "DCA" || draft.mode === "LIMIT") && !draft.tokenMint && (text.startsWith("dca_") || text.startsWith("limit_"))) {
+    const { setOrderInactive, getOrderById } = await import("./services/orders.store.js")
+    const orderId = text.trim().split(/\s+/)[0]
+    const order = await getOrderById(orderId)
+    if (order && order.userId === from.id) {
+      await setOrderInactive(orderId)
+      await clearCreateDraft(from.id)
+      await ctx.reply("✅ Order cancelled.")
+    } else {
+      await ctx.reply("❌ Order not found or not yours. Send a valid DCA/Limit order ID.")
+    }
+    return
   }
 
   // Step 1: token mint

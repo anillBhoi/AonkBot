@@ -131,6 +131,31 @@ export async function getTokenBalance(
 }
 
 /**
+ * Get token balance and decimals (for sell flow).
+ * Returns decimals from token account; defaults to 6 if no account.
+ */
+export async function getTokenBalanceAndDecimals(
+  publicKey: string,
+  tokenMint: string
+): Promise<{ balance: number; decimals: number }> {
+  try {
+    const pubKey = new PublicKey(publicKey)
+    const mint = new PublicKey(tokenMint)
+    const accounts = await solana.getTokenAccountsByOwner(pubKey, { mint })
+    if (accounts.value.length === 0) {
+      return { balance: 0, decimals: 6 }
+    }
+    const balance = await solana.getTokenAccountBalance(accounts.value[0].pubkey)
+    const decimals = balance.value.decimals ?? 6
+    const amount = Number(balance.value.amount) / 10 ** decimals
+    return { balance: amount, decimals }
+  } catch (err) {
+    console.error('[Token BalanceAndDecimals Error]', err)
+    return { balance: 0, decimals: 6 }
+  }
+}
+
+/**
  * Get all token balances for a wallet
  */
 export async function getTokenBalances(publicKey: string): Promise<
