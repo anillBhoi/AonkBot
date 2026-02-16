@@ -1,11 +1,10 @@
-// api/webhook.ts
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { webhookCallback } from "grammy";
 import { bot, initBot } from "../src/bot.js";
 
-export default async function handler(req: any, res: any) {
-  // ensure handlers are registered on cold start
-  await initBot();
+const handler = webhookCallback(bot, "http");
 
-  // hand over request to grammy
-  return webhookCallback(bot, "http")(req, res);
+export default async function (req: VercelRequest, res: VercelResponse) {
+  await initBot();          // registers handlers once
+  return handler(req, res); // handles Telegram update
 }
